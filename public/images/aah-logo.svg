@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 95">
+  <!--
+    Animal Assisted Happiness logo
+    Purple heart (#6644c2) with white AAH lettering,
+    girl silhouette (top-center) and horse silhouette (top-right).
+    Matches the brand logo at animalassistedhappiness.org.
+  -->
+
+  <!-- Heart shape -->
+  <path d="M50 27
+           A21,21,0,0,0,8,27
+           Q8,57,50,88
+           Q92,57,92,27
+           A21,21,0,0,0,50,27 Z"
+        fill="#6644c2"/>
+
+  <!-- Girl silhouette (top-center, above the A) -->
+  <g fill="white">
+    <!-- head -->
+    <circle cx="42" cy="14" r="3.8"/>
+    <!-- torso -->
+    <path d="M39,18 C38,22 38,26 40,27 L44,27 C46,26 46,22 45,18 Z"/>
+    <!-- left arm stretched back -->
+    <path d="M39,20 L34,23" stroke="white" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+    <!-- right arm forward -->
+    <path d="M45,20 L49,22" stroke="white" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+    <!-- left leg back -->
+    <path d="M40,27 L37,33" stroke="white" stroke-width="2" stroke-linecap="round" fill="none"/>
+    <!-- right leg forward -->
+    <path d="M44,27 L47,33" stroke="white" stroke-width="2" stroke-linecap="round" fill="none"/>
+  </g>
+
+  <!-- Horse silhouette (top-right, the H cross-bar becomes the horse's back) -->
+  <g fill="white">
+    <!-- neck + head curve -->
+    <path d="M70,27 C70,20 74,16 76,14 C78,12 80,12 81,14 C82,16 80,18 78,19 C76,20 74,22 74,27 Z"/>
+    <!-- ear -->
+    <path d="M78,13 L80,10 L82,12 Z"/>
+    <!-- body hint (just the shoulder area blending into the H) -->
+    <path d="M70,27 L80,27 L80,30 Q75,29 70,30 Z"/>
+    <!-- mane -->
+    <path d="M76,14 C75,16 73,18 73,21" stroke="white" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+  </g>
+
+  <!-- "AAH" lettering -->
+  <text x="50" y="63"
+        text-anchor="middle"
+        fill="white"
+        font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+        font-weight="900"
+        font-size="25"
+        letter-spacing="1">AAH</text>
+
+  <!-- "Animal Assisted Happiness" sub-text -->
+  <text x="50" y="74"
+        text-anchor="middle"
+        fill="white"
+        font-family="Arial, Helvetica, sans-serif"
+        font-weight="700"
+        font-size="6.8">Animal Assisted Happiness</text>
+</svg>

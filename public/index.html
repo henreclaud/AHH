@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Volunteer · Animal Assisted Happiness</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="volunteer">
+    <!-- Header with the real AAH rainbow logo -->
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="index.html">
+          <!-- ↓ AAH LOGO — save your image to public/images/aah-logo.svg -->
+          <img class="brand-logo" src="images/aah-logo.svg" alt="Animal Assisted Happiness logo" />
+          <!-- ↑ AAH LOGO ─────────────────────────────────────────────── -->
+          <span class="brand-text">Animal Assisted Happiness</span>
+        </a>
+        <a class="link" href="admin.html">Admin</a>
+      </div>
+    </header>
+
+    <!-- Compact page header: title + live open-visits counter -->
+    <section class="masthead">
+      <div class="container masthead-inner">
+        <div class="masthead-copy">
+          <h1 class="masthead-title">Volunteer visits</h1>
+          <p class="masthead-sub">
+            Find an upcoming Smile Farm or mobile barnyard visit and claim your spot.
+          </p>
+        </div>
+        <div class="masthead-stat" id="open-stat">
+          <span class="stat-number" id="stat-number">—</span>
+          <span class="stat-label">visits open</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sticky filter bar — date segments + type chips, nothing else -->
+    <div class="filter-bar" id="filter-bar">
+      <div class="container filter-bar-inner">
+        <!-- Date range -->
+        <div class="seg-group" id="filter-date" role="group" aria-label="Filter by date">
+          <button class="seg active" data-range="all">All dates</button>
+          <button class="seg" data-range="today">Today</button>
+          <button class="seg" data-range="week">This week</button>
+          <button class="seg" data-range="month">This month</button>
+        </div>
+        <!-- Activity-type chips are injected here by app.js -->
+        <div class="chip-row" id="filter-type" role="group" aria-label="Filter by activity type"></div>
+      </div>
+    </div>
+
+    <main class="container">
+      <div class="results-bar">
+        <p class="results-count" id="results-count"></p>
+        <button class="clear-btn" id="clear-filters" hidden>Clear filters</button>
+      </div>
+
+      <!-- Shift cards injected here by app.js -->
+      <div id="shifts" class="shift-grid-compact"></div>
+
+      <!-- Loading / empty / error state -->
+      <p id="status" class="status"></p>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        Made with love for the animals and the people they visit.
+      </div>
+    </footer>
+
+    <!-- Signup popup -->
+    <dialog id="signup-dialog">
+      <form id="signup-form">
+        <h2 id="dialog-title">Sign up</h2>
+        <p class="dialog-sub">Pop your details in and you're on the team.</p>
+        <label>
+          Your name
+          <input type="text" id="name" name="name" autocomplete="name" required />
+        </label>
+        <label>
+          Your email
+          <input type="email" id="email" name="email" autocomplete="email" required />
+        </label>
+        <p id="form-error" class="form-error"></p>
+        <div class="dialog-buttons">
+          <button type="button" id="cancel-button" class="btn btn-secondary">Cancel</button>
+          <button type="submit" class="btn btn-primary">Count me in</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>

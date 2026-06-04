@@ -1,0 +1,8 @@
+# Installed dependencies (re-created by "npm install")
+node_modules/
+
+# The local SQLite database file (your own data, not code)
+database.sqlite
+
+# Mac system files
+.DS_Store
