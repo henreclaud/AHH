@@ -427,6 +427,16 @@ input:focus {
   color: var(--purple);
 }
 
+.cancel-inline-link {
+  color: var(--purple);
+  text-decoration: none;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.cancel-inline-link:hover {
+  text-decoration: underline;
+}
+
 /* ---- Cancel page ---- */
 .cancel-page {
   max-width: 500px;
