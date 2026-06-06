@@ -94,21 +94,25 @@ async function refreshCalendarCache() {
 
   const calendar = google.calendar({ version: 'v3', auth: getAuth() });
 
-  const now     = new Date();
-  const timeMin = now.toISOString();
-  // Fetch events up to 90 days ahead so the list covers the near future.
-  const timeMax = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString();
+  const timeMin = new Date().toISOString(); // today — skip past events
 
-  const res = await calendar.events.list({
-    calendarId:   CALENDAR_ID,
-    timeMin,
-    timeMax,
-    singleEvents: true,      // expand recurring events
-    orderBy:      'startTime',
-    maxResults:   500,
-  });
+  // Paginate through all results (API max per page is 2500).
+  const events = [];
+  let pageToken;
+  do {
+    const res = await calendar.events.list({
+      calendarId:   CALENDAR_ID,
+      timeMin,
+      singleEvents: true,   // expand recurring events
+      orderBy:      'startTime',
+      maxResults:   2500,
+      pageToken,
+    });
+    const items = res.data.items || [];
+    events.push(...items);
+    pageToken = res.data.nextPageToken;
+  } while (pageToken);
 
-  const events = res.data.items || [];
   const shifts = [];
 
   for (const event of events) {
