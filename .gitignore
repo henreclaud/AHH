@@ -1,8 +1,15 @@
 # Installed dependencies (re-created by "npm install")
 node_modules/
 
-# The local SQLite database file (your own data, not code)
+# SQLite — no longer used, but ignore just in case
 database.sqlite
 
 # Mac system files
 .DS_Store
+
+# Local environment variables (contains secrets — never commit)
+.env
+
+# Service account credentials if saved as a file
+*.credentials.json
+service-account*.json

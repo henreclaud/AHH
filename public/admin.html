@@ -10,7 +10,7 @@
     <header class="site-header">
       <div class="container header-inner">
         <a class="brand" href="index.html">
-          <!-- ↓ AAH LOGO — save your image to public/images/aah-logo.svg -->
+          <!-- ↓ AAH LOGO — save your image to public/images/aah-logo.png -->
           <img class="brand-logo" src="images/aah-logo.svg" alt="Animal Assisted Happiness logo" />
           <!-- ↑ AAH LOGO ─────────────────────────────────────────────── -->
           <span class="brand-text">Animal Assisted Happiness</span>
@@ -20,66 +20,16 @@
     </header>
 
     <main class="container">
-      <h1 class="page-title">Admin</h1>
-      <p class="page-sub">Add new visits and see who has signed up.</p>
+      <h1 class="page-title">Admin — Signups</h1>
+      <p class="page-sub">
+        Visits are managed in
+        <strong>Google Calendar</strong> — add, edit, or cancel events there and
+        they appear here within 5 minutes. Signups are saved to
+        <strong>Google Sheets</strong>.
+      </p>
 
-      <!-- Form to add a new shift -->
-      <section class="card add-shift">
-        <h2>Add a new visit</h2>
-        <form id="add-shift-form" class="add-shift-form">
-          <label>
-            Visit name
-            <input type="text" id="title" placeholder="e.g. Pony Visit — Senior Living" required />
-          </label>
-
-          <label>
-            Address (becomes a clickable map link)
-            <input type="text" id="location" placeholder="e.g. 500 W Middlefield Rd, Mountain View, CA" />
-          </label>
-
-          <label>
-            Activity type (used for filtering)
-            <input type="text" id="category" list="category-options" placeholder="e.g. Pony Visit" />
-            <datalist id="category-options">
-              <option value="Pony Visit"></option>
-              <option value="Bunny Visit"></option>
-              <option value="Farm Care"></option>
-              <option value="Mobile Visit"></option>
-              <option value="Reading Buddies"></option>
-            </datalist>
-          </label>
-
-          <div class="form-row">
-            <label>
-              Icon
-              <input type="text" id="icon" maxlength="2" placeholder="🐴" />
-            </label>
-            <label>
-              Date
-              <input type="date" id="date" required />
-            </label>
-            <label>
-              Start time
-              <input type="time" id="start_time" required />
-            </label>
-            <label>
-              End time
-              <input type="time" id="end_time" required />
-            </label>
-            <label>
-              Spots needed
-              <input type="number" id="capacity" min="1" value="1" required />
-            </label>
-          </div>
-
-          <p id="add-error" class="form-error"></p>
-          <button type="submit" class="btn btn-primary">Add visit</button>
-        </form>
-      </section>
-
-      <!-- List of existing shifts with their signups -->
+      <!-- List of shifts pulled from Google Calendar, each with its signups -->
       <section>
-        <h2>Visits &amp; signups</h2>
         <div id="admin-shifts"></div>
         <p id="admin-status" class="status"></p>
       </section>

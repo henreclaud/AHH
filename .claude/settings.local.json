@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:www.animalassistedhappiness.org)"
+      "WebFetch(domain:www.animalassistedhappiness.org)",
+      "Bash(/tmp/gh_bin/gh_2.93.0_macOS_amd64/bin/gh auth *)",
+      "Bash(git push *)",
+      "Bash(npm install *)"
     ]
   }
 }
