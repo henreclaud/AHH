@@ -54,32 +54,57 @@ function getAuth() {
 
 // ── Calendar helpers ──────────────────────────────────────────────────────────
 
-// Extract the shift name: everything in the event title before " Limit".
-// e.g. "Pony Visit — Senior Living  Limit 4 volunteers" → "Pony Visit — Senior Living"
-function parseShiftName(title) {
-  const match = title.match(/^(.+?)\s+Limit\s+\d+/i);
-  return match ? match[1].trim() : null;
+const PT = 'America/Los_Angeles'; // AAH operates in Pacific Time
+
+// Format a JS Date as "HH:MM" in Pacific Time.
+function toHHMM(date) {
+  return date.toLocaleTimeString('en-US', {
+    timeZone: PT,
+    hour:     '2-digit',
+    minute:   '2-digit',
+    hour12:   false,
+  });
 }
 
-// Extract volunteer capacity from "Limit X volunteers" in the event title.
-function parseCapacity(title) {
-  const match = title.match(/Limit\s+(\d+)\s+volunteer/i);
-  return match ? parseInt(match[1], 10) : null;
+// Format a JS Date as "YYYY-MM-DD" in Pacific Time.
+function toDateStr(date) {
+  return date.toLocaleDateString('en-CA', { timeZone: PT }); // en-CA gives YYYY-MM-DD
+}
+
+// Patterns that indicate a volunteer limit — checked in title AND description.
+// Matches: "Limit 5", "Limit: 5", "Limit 5 volunteers", "5 spots", "5 volunteer spots"
+const LIMIT_RE = /(?:limit:?\s*(\d+)(?:\s+volunteers?)?|(\d+)\s+(?:volunteer\s+)?spots?)/i;
+
+// Extract volunteer capacity from a string (title or description).
+// Returns an integer, or null if no pattern found.
+function parseCapacity(text) {
+  if (!text) return null;
+  const m = text.match(LIMIT_RE);
+  if (!m) return null;
+  return parseInt(m[1] || m[2], 10);
+}
+
+// Extract the shift name from the event title.
+// Strips the limit phrase and any trailing dashes / punctuation.
+function parseShiftName(title) {
+  // Remove the limit phrase (and everything after it on the same segment).
+  const stripped = title
+    .replace(/\s*[-–—]?\s*(?:limit:?\s*\d+(?:\s+volunteers?)?|\d+\s+(?:volunteer\s+)?spots?).*/i, '')
+    .trim()
+    .replace(/[-–—\s]+$/, '') // remove trailing dashes / spaces
+    .trim();
+  return stripped || null;
 }
 
 // Derive the activity category and emoji icon from the shift name.
 function deriveCategory(name) {
-  if (/pony|horse/i.test(name))      return { category: 'Pony Visit',       icon: '🐴' };
-  if (/bunny|rabbit/i.test(name))    return { category: 'Bunny Visit',      icon: '🐰' };
-  if (/goat|chore|farm/i.test(name)) return { category: 'Farm Care',        icon: '🐐' };
-  if (/mobile|petting/i.test(name))  return { category: 'Mobile Visit',     icon: '🐤' };
-  if (/guinea|reading/i.test(name))  return { category: 'Reading Buddies',  icon: '🐹' };
+  if (/pony|horse/i.test(name))       return { category: 'Pony Visit',      icon: '🐴' };
+  if (/bunny|rabbit/i.test(name))     return { category: 'Bunny Visit',     icon: '🐰' };
+  if (/goat|chore|farm/i.test(name))  return { category: 'Farm Care',       icon: '🐐' };
+  if (/mobile|petting/i.test(name))   return { category: 'Mobile Visit',    icon: '🐤' };
+  if (/guinea|reading/i.test(name))   return { category: 'Reading Buddies', icon: '🐹' };
+  if (/workshop/i.test(name))         return { category: 'Workshop',        icon: '🎨' };
   return { category: 'Visit', icon: '🐾' };
-}
-
-// Format a JS Date as "HH:MM" in local time.
-function toHHMM(date) {
-  return date.toTimeString().slice(0, 5);
 }
 
 // ── Calendar cache ────────────────────────────────────────────────────────────
@@ -94,16 +119,21 @@ async function refreshCalendarCache() {
 
   const calendar = google.calendar({ version: 'v3', auth: getAuth() });
 
-  const timeMin = new Date().toISOString(); // today — skip past events
+  const now     = new Date();
+  const timeMin = now.toISOString();
+  // Cap at 60 days ahead — prevents recurring-event explosion into thousands of instances.
+  const timeMax = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString();
 
-  // Paginate through all results (API max per page is 2500).
+  // Paginate through all results within the window (API max per page is 2500).
   const events = [];
   let pageToken;
   do {
     const res = await calendar.events.list({
       calendarId:   CALENDAR_ID,
       timeMin,
-      singleEvents: true,   // expand recurring events
+      timeMax,
+      timeZone:     PT,           // return dateTime strings in Pacific Time
+      singleEvents: true,         // expand recurring events into individual instances
       orderBy:      'startTime',
       maxResults:   2500,
       pageToken,
@@ -117,11 +147,15 @@ async function refreshCalendarCache() {
 
   for (const event of events) {
     const rawTitle = (event.summary || '').trim();
-    const name     = parseShiftName(rawTitle);
-    const capacity = parseCapacity(rawTitle);
+    const desc     = (event.description || '').trim();
 
-    // Skip any event that doesn't carry a "Limit X volunteers" pattern.
-    if (!name || capacity === null) continue;
+    // Try to get shift name from title; skip all-day/untitled events with no usable name.
+    const name = parseShiftName(rawTitle);
+    if (!name) continue;
+
+    // Look for a capacity limit in the title first, then the description.
+    // If neither has one, default to 10 spots so the event still shows up.
+    const capacity = parseCapacity(rawTitle) ?? parseCapacity(desc) ?? 10;
 
     // Google Calendar sends dateTime for timed events and date for all-day events.
     const startDt = new Date(event.start.dateTime || event.start.date);
@@ -130,13 +164,13 @@ async function refreshCalendarCache() {
     const { category, icon } = deriveCategory(name);
 
     shifts.push({
-      id:         event.id,           // Google Calendar event ID — stable, unique
+      id:         event.id,        // Google Calendar event ID — stable, unique
       title:      name,
       icon,
       category,
       location:   (event.location || '').trim(),
-      date:       startDt.toISOString().slice(0, 10),  // "YYYY-MM-DD"
-      start_time: toHHMM(startDt),
+      date:       toDateStr(startDt),   // "YYYY-MM-DD" in Pacific Time
+      start_time: toHHMM(startDt),     // "HH:MM" in Pacific Time
       end_time:   toHHMM(endDt),
       capacity,
     });
