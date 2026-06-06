@@ -10,38 +10,14 @@ if (location.protocol === 'file:') {
   throw new Error('Opened via file:// — server not running.');
 }
 
-const form        = document.getElementById('cancel-form');
-const emailInput  = document.getElementById('cancel-email');
-const nameInput   = document.getElementById('cancel-name');
-const dateInput   = document.getElementById('cancel-date');
-const typeSelect  = document.getElementById('cancel-type');
-const errorEl     = document.getElementById('cancel-error');
-const successEl   = document.getElementById('cancel-success');
-const submitBtn   = document.getElementById('cancel-submit');
-
-// Populate the shift-type dropdown from the live calendar data so it always
-// reflects every category currently on the calendar (including rare ones).
-async function loadShiftTypes() {
-  try {
-    const res    = await fetch('/api/shifts');
-    const shifts = await res.json();
-
-    // Collect unique categories, sorted alphabetically.
-    const types = [...new Set(shifts.map(s => s.category || 'Visit'))].sort();
-
-    typeSelect.innerHTML = '<option value="" disabled selected>Select a shift type…</option>';
-    types.forEach(t => {
-      const opt = document.createElement('option');
-      opt.value       = t;
-      opt.textContent = t;
-      typeSelect.appendChild(opt);
-    });
-  } catch {
-    typeSelect.innerHTML = '<option value="" disabled selected>Could not load — refresh the page</option>';
-  }
-}
-
-loadShiftTypes();
+const form       = document.getElementById('cancel-form');
+const nameInput  = document.getElementById('cancel-name');
+const emailInput = document.getElementById('cancel-email');
+const dateInput  = document.getElementById('cancel-date');
+const timeInput  = document.getElementById('cancel-time');
+const errorEl    = document.getElementById('cancel-error');
+const successEl  = document.getElementById('cancel-success');
+const submitBtn  = document.getElementById('cancel-submit');
 
 function showError(msg) {
   errorEl.textContent = msg;
@@ -67,10 +43,10 @@ form.addEventListener('submit', async (e) => {
   submitBtn.textContent = 'Searching…';
 
   const payload = {
-    email:     emailInput.value.trim(),
     name:      nameInput.value.trim(),
-    date:      dateInput.value,       // "YYYY-MM-DD"
-    shiftType: typeSelect.value,
+    email:     emailInput.value.trim(),
+    date:      dateInput.value,          // "YYYY-MM-DD"
+    startTime: timeInput.value.trim(),   // "9am", "3pm", "10:30am", etc.
   };
 
   try {

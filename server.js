@@ -71,14 +71,14 @@ app.post('/api/shifts/:id/signup', async (req, res) => {
 });
 
 // POST /api/signups/cancel
-// Cancels a signup. Body: { email, name, date, shiftType }.
+// Cancels a signup. Body: { name, email, date, startTime }.
 app.post('/api/signups/cancel', async (req, res) => {
-  const email     = (req.body.email     || '').trim().toLowerCase();
   const name      = (req.body.name      || '').trim();
+  const email     = (req.body.email     || '').trim().toLowerCase();
   const date      = (req.body.date      || '').trim(); // "YYYY-MM-DD"
-  const shiftType = (req.body.shiftType || '').trim();
+  const startTime = (req.body.startTime || '').trim(); // e.g. "9am", "3pm"
 
-  if (!email || !name || !date || !shiftType) {
+  if (!name || !email || !date || !startTime) {
     return res.status(400).json({ error: 'Please fill in all four fields.' });
   }
   if (!isValidEmail(email)) {
@@ -86,7 +86,7 @@ app.post('/api/signups/cancel', async (req, res) => {
   }
 
   try {
-    const result = await cancelSignup(email, name, date, shiftType);
+    const result = await cancelSignup(name, email, date, startTime);
     if (!result.ok) return res.status(404).json({ error: result.error });
     res.json({ message: result.message });
   } catch (err) {

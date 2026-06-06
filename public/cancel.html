@@ -21,22 +21,10 @@
       <div class="cancel-page">
         <h1 class="page-title">Cancel my signup</h1>
         <p class="page-sub">
-          Fill in all four fields exactly as you signed up and we'll remove you from the list.
+          Enter your name, email, shift date, and start time and we'll remove you from the list.
         </p>
 
         <form id="cancel-form" class="cancel-form card">
-          <label>
-            Your email address
-            <input
-              type="email"
-              id="cancel-email"
-              name="email"
-              autocomplete="email"
-              placeholder="you@example.com"
-              required
-            />
-          </label>
-
           <label>
             Your full name
             <input
@@ -45,6 +33,18 @@
               name="name"
               autocomplete="name"
               placeholder="Jane Smith"
+              required
+            />
+          </label>
+
+          <label>
+            Your email address
+            <input
+              type="email"
+              id="cancel-email"
+              name="email"
+              autocomplete="email"
+              placeholder="you@example.com"
               required
             />
           </label>
@@ -60,10 +60,14 @@
           </label>
 
           <label>
-            Shift type
-            <select id="cancel-type" name="shiftType" required>
-              <option value="" disabled selected>Loading…</option>
-            </select>
+            Shift start time
+            <input
+              type="text"
+              id="cancel-time"
+              name="startTime"
+              placeholder="e.g. 9am, 3pm, 10:30am"
+              required
+            />
           </label>
 
           <p id="cancel-error"   class="form-error"   hidden></p>

@@ -166,8 +166,8 @@ const MAIN_FILTER_TYPES = [
   'Farm Chores',
   'Open Houses',
   'Mobile Visits',
+  'Volunteer Orientation',
   'Farm Visits',
-  'Volunteer Orientations',
 ];
 
 function buildTypeChips() {

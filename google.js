@@ -358,11 +358,46 @@ async function createSignup(shiftId, name, email) {
   return { ok: true, message: `You're signed up for ${shift.title}. Thank you!` };
 }
 
+// Normalise a user-entered time string to "HH:MM" (24-hour) for comparison.
+// Accepts: "9am", "9:00am", "9:00 am", "3pm", "3:30pm", "09:00", "15:30", etc.
+// Returns null if the string can't be parsed.
+function normalizeTime(raw) {
+  const s = raw.trim().toLowerCase().replace(/\s/g, '');
+
+  // Try 12-hour with optional minutes: 9am / 9:00am / 3:30pm
+  const ampm = s.match(/^(\d{1,2})(?::(\d{2}))?([ap]m)$/);
+  if (ampm) {
+    let h = parseInt(ampm[1], 10);
+    const m = parseInt(ampm[2] || '0', 10);
+    if (ampm[3] === 'pm' && h !== 12) h += 12;
+    if (ampm[3] === 'am' && h === 12) h = 0;
+    if (h > 23 || m > 59) return null;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  // Try 24-hour: 09:00 / 9:00 / 15:30
+  const h24 = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (h24) {
+    const h = parseInt(h24[1], 10);
+    const m = parseInt(h24[2], 10);
+    if (h > 23 || m > 59) return null;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  return null;
+}
+
 // Cancels a volunteer signup by matching all four fields:
-//   email (col C), name (col B), date (col F), shift type (col E, partial).
+//   name (col B, case-insensitive), email (col C), date (col F), start time (col G).
 // Returns { ok: true, message } or { ok: false, error }.
-async function cancelSignup(email, name, date, shiftType) {
+async function cancelSignup(name, email, date, startTime) {
   if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
+
+  // Normalise the user's time input to "HH:MM" for comparison.
+  const timeNorm = normalizeTime(startTime);
+  if (!timeNorm) {
+    return { ok: false, error: 'Could not understand that time. Try "9am", "3pm", or "10:30am".' };
+  }
 
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
 
@@ -373,29 +408,27 @@ async function cancelSignup(email, name, date, shiftType) {
 
   const rows = res.data.values || [];
 
-  // Normalise inputs for comparison.
-  const emailNorm = email.trim().toLowerCase();
   const nameNorm  = name.trim().toLowerCase();
-  const dateNorm  = date.trim();                          // "YYYY-MM-DD"
-  const typeNorm  = shiftType.trim().toLowerCase();
+  const emailNorm = email.trim().toLowerCase();
+  const dateNorm  = date.trim(); // "YYYY-MM-DD"
 
   // Sheet columns (0-indexed):
   //  0 Timestamp  1 Name  2 Email  3 ShiftID  4 ShiftName  5 ShiftDate  6 ShiftTime
+  // Col 6 is stored as "HH:MM–HH:MM" — extract just the start time before the dash.
   let matchIndex = -1;
   for (let i = 1; i < rows.length; i++) {
-    const row          = rows[i];
-    const rowEmail     = (row[2] || '').toLowerCase();
-    const rowName      = (row[1] || '').toLowerCase();
-    const rowDate      = (row[5] || '').trim();           // stored as "YYYY-MM-DD"
-    const rowShiftName = (row[4] || '').toLowerCase();
+    const row      = rows[i];
+    const rowName  = (row[1] || '').toLowerCase();
+    const rowEmail = (row[2] || '').toLowerCase();
+    const rowDate  = (row[5] || '').trim();
+    const rowTime  = (row[6] || '').split('–')[0].trim(); // "HH:MM" start time
 
-    const emailMatch = rowEmail === emailNorm;
-    const nameMatch  = rowName  === nameNorm;
-    const dateMatch  = rowDate  === dateNorm;
-    // Shift type: partial case-insensitive — "Farm Chores" matches "farm chores june 9"
-    const typeMatch  = rowShiftName.includes(typeNorm);
-
-    if (emailMatch && nameMatch && dateMatch && typeMatch) {
+    if (
+      rowName  === nameNorm  &&
+      rowEmail === emailNorm &&
+      rowDate  === dateNorm  &&
+      rowTime  === timeNorm
+    ) {
       matchIndex = i;
       break;
     }
@@ -404,15 +437,14 @@ async function cancelSignup(email, name, date, shiftType) {
   if (matchIndex === -1) {
     return {
       ok: false,
-      error: 'No signup found matching those details. Please double-check and try again.',
+      error: 'No signup found. Please double-check your name, email, date, and time.',
     };
   }
 
-  // Sheet rows are 1-indexed; array index 0 = header = sheet row 1,
-  // so array index N = sheet row N+1.
+  // Sheet rows are 1-indexed; array index N = sheet row N+1.
   const sheetRow = matchIndex + 1;
 
-  // Delete the entire row (keeps sheet clean — no blank rows).
+  // Delete the entire row so the sheet stays clean (no blank rows).
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId: SHEET_ID,
     requestBody: {
@@ -421,7 +453,7 @@ async function cancelSignup(email, name, date, shiftType) {
           range: {
             sheetId:    0,
             dimension:  'ROWS',
-            startIndex: sheetRow - 1,   // 0-indexed
+            startIndex: sheetRow - 1,  // 0-indexed
             endIndex:   sheetRow,
           },
         },
