@@ -19,6 +19,30 @@ const errorEl     = document.getElementById('cancel-error');
 const successEl   = document.getElementById('cancel-success');
 const submitBtn   = document.getElementById('cancel-submit');
 
+// Populate the shift-type dropdown from the live calendar data so it always
+// reflects every category currently on the calendar (including rare ones).
+async function loadShiftTypes() {
+  try {
+    const res    = await fetch('/api/shifts');
+    const shifts = await res.json();
+
+    // Collect unique categories, sorted alphabetically.
+    const types = [...new Set(shifts.map(s => s.category || 'Visit'))].sort();
+
+    typeSelect.innerHTML = '<option value="" disabled selected>Select a shift type…</option>';
+    types.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value       = t;
+      opt.textContent = t;
+      typeSelect.appendChild(opt);
+    });
+  } catch {
+    typeSelect.innerHTML = '<option value="" disabled selected>Could not load — refresh the page</option>';
+  }
+}
+
+loadShiftTypes();
+
 function showError(msg) {
   errorEl.textContent = msg;
   errorEl.hidden = false;

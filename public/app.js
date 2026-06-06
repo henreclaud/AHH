@@ -161,6 +161,15 @@ function createCard(shift) {
 }
 
 // ── Type chips ───────────────────────────────────────────────────────────────
+// Only these five types appear as filter chips on the main page.
+const MAIN_FILTER_TYPES = [
+  'Farm Chores',
+  'Open Houses',
+  'Mobile Visits',
+  'Farm Visits',
+  'Volunteer Orientations',
+];
+
 function buildTypeChips() {
   const counts = new Map();
   allShifts.forEach(s => {
@@ -169,11 +178,12 @@ function buildTypeChips() {
   });
 
   typeRow.innerHTML = '';
-  // "All" chip
+  // "All types" chip always first.
   typeRow.appendChild(makeChip('all', 'All types', allShifts.length));
-  [...counts.keys()]
-    .sort((a, b) => a.localeCompare(b))
-    .forEach(t => typeRow.appendChild(makeChip(t, t, counts.get(t))));
+  // Only show the five approved filter types (in the defined order), skip missing ones.
+  MAIN_FILTER_TYPES.forEach(t => {
+    if (counts.has(t)) typeRow.appendChild(makeChip(t, t, counts.get(t)));
+  });
 }
 
 function makeChip(value, label, count) {
