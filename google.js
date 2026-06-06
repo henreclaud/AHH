@@ -56,14 +56,14 @@ function getAuth() {
 
 const PT = 'America/Los_Angeles'; // AAH operates in Pacific Time
 
-// Format a JS Date as "HH:MM" in Pacific Time.
+// Format a JS Date as "9:00am" / "3:30pm" in Pacific Time.
 function toHHMM(date) {
   return date.toLocaleTimeString('en-US', {
     timeZone: PT,
-    hour:     '2-digit',
+    hour:     'numeric',
     minute:   '2-digit',
-    hour12:   false,
-  });
+    hour12:   true,
+  }).toLowerCase().replace(/\s/g, ''); // "9:00 AM" → "9:00am"
 }
 
 // Format a JS Date as "YYYY-MM-DD" in Pacific Time.
@@ -97,13 +97,21 @@ function parseShiftName(title) {
 }
 
 // Derive the activity category and emoji icon from the shift name.
+// Category names must exactly match the MAIN_FILTER_TYPES list in app.js
+// so the filter chips work correctly.
 function deriveCategory(name) {
-  if (/pony|horse/i.test(name))       return { category: 'Pony Visit',      icon: '🐴' };
-  if (/bunny|rabbit/i.test(name))     return { category: 'Bunny Visit',     icon: '🐰' };
-  if (/goat|chore|farm/i.test(name))  return { category: 'Farm Care',       icon: '🐐' };
-  if (/mobile|petting/i.test(name))   return { category: 'Mobile Visit',    icon: '🐤' };
-  if (/guinea|reading/i.test(name))   return { category: 'Reading Buddies', icon: '🐹' };
-  if (/workshop/i.test(name))         return { category: 'Workshop',        icon: '🎨' };
+  if (/farm\s*chore/i.test(name))        return { category: 'Farm Chores',          icon: '🐐' };
+  if (/open\s*house/i.test(name))        return { category: 'Open Houses',           icon: '🏡' };
+  if (/mobile|petting/i.test(name))      return { category: 'Mobile Visits',         icon: '🐤' };
+  if (/volunteer\s*orient/i.test(name))  return { category: 'Volunteer Orientation', icon: '📋' };
+  if (/farm\s*visit/i.test(name))        return { category: 'Farm Visits',           icon: '🌾' };
+  if (/pony|horse/i.test(name))          return { category: 'Pony Visit',            icon: '🐴' };
+  if (/bunny|rabbit/i.test(name))        return { category: 'Bunny Visit',           icon: '🐰' };
+  if (/guinea|reading/i.test(name))      return { category: 'Reading Buddies',       icon: '🐹' };
+  if (/workshop/i.test(name))            return { category: 'Workshop',              icon: '🎨' };
+  if (/barnyard|buddy/i.test(name))      return { category: 'Barnyard Buddy Time',   icon: '🐄' };
+  if (/ambassador/i.test(name))          return { category: 'Youth Ambassador',      icon: '⭐' };
+  if (/goat/i.test(name))               return { category: 'Farm Care',             icon: '🐐' };
   return { category: 'Visit', icon: '🐾' };
 }
 
@@ -358,30 +366,31 @@ async function createSignup(shiftId, name, email) {
   return { ok: true, message: `You're signed up for ${shift.title}. Thank you!` };
 }
 
-// Normalise a user-entered time string to "HH:MM" (24-hour) for comparison.
-// Accepts: "9am", "9:00am", "9:00 am", "3pm", "3:30pm", "09:00", "15:30", etc.
+// Normalise a time string to "H:MMam/pm" format for comparison.
+// Accepts: "9am", "9:00am", "3pm", "3:30pm", "09:00", "15:30", etc.
 // Returns null if the string can't be parsed.
 function normalizeTime(raw) {
   const s = raw.trim().toLowerCase().replace(/\s/g, '');
 
-  // Try 12-hour with optional minutes: 9am / 9:00am / 3:30pm
+  // 12-hour with optional minutes: "9am", "9:00am", "3:30pm"
   const ampm = s.match(/^(\d{1,2})(?::(\d{2}))?([ap]m)$/);
   if (ampm) {
-    let h = parseInt(ampm[1], 10);
+    const h = parseInt(ampm[1], 10);
     const m = parseInt(ampm[2] || '0', 10);
-    if (ampm[3] === 'pm' && h !== 12) h += 12;
-    if (ampm[3] === 'am' && h === 12) h = 0;
-    if (h > 23 || m > 59) return null;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    if (h < 1 || h > 12 || m > 59) return null;
+    return `${h}:${String(m).padStart(2, '0')}${ampm[3]}`;
   }
 
-  // Try 24-hour: 09:00 / 9:00 / 15:30
+  // 24-hour: "09:00", "15:30" — convert to 12-hour am/pm
   const h24 = s.match(/^(\d{1,2}):(\d{2})$/);
   if (h24) {
-    const h = parseInt(h24[1], 10);
+    let h = parseInt(h24[1], 10);
     const m = parseInt(h24[2], 10);
     if (h > 23 || m > 59) return null;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const period = h >= 12 ? 'pm' : 'am';
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    return `${h}:${String(m).padStart(2, '0')}${period}`;
   }
 
   return null;
@@ -421,13 +430,15 @@ async function cancelSignup(name, email, date, startTime) {
     const rowName  = (row[1] || '').toLowerCase();
     const rowEmail = (row[2] || '').toLowerCase();
     const rowDate  = (row[5] || '').trim();
-    const rowTime  = (row[6] || '').split('–')[0].trim(); // "HH:MM" start time
+    // Normalize stored start time (handles old "09:00" and new "9:00am" formats).
+    const rowTimeRaw  = (row[6] || '').split('–')[0].trim();
+    const rowTimeNorm = normalizeTime(rowTimeRaw);
 
     if (
-      rowName  === nameNorm  &&
-      rowEmail === emailNorm &&
-      rowDate  === dateNorm  &&
-      rowTime  === timeNorm
+      rowName      === nameNorm  &&
+      rowEmail     === emailNorm &&
+      rowDate      === dateNorm  &&
+      rowTimeNorm  === timeNorm
     ) {
       matchIndex = i;
       break;
