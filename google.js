@@ -101,7 +101,7 @@ function parseShiftName(title) {
 // so the filter chips work correctly.
 function deriveCategory(name) {
   if (/farm\s*chore/i.test(name))        return { category: 'Farm Chores',          icon: '🐐' };
-  if (/open\s*h/i.test(name))            return { category: 'Open Hauers',           icon: '🏡' };
+  if (/open\s*h/i.test(name))            return { category: 'Open Hours',            icon: '🏡' };
   if (/mobile|petting/i.test(name))      return { category: 'Mobile Visits',         icon: '🐤' };
   if (/volunteer\s*orient/i.test(name))  return { category: 'Volunteer Orientation', icon: '📋' };
   if (/farm\s*visit/i.test(name))        return { category: 'Farm Visits',           icon: '🌾' };

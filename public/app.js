@@ -164,7 +164,7 @@ function createCard(shift) {
 // Only these five types appear as filter chips on the main page.
 const MAIN_FILTER_TYPES = [
   'Farm Chores',
-  'Open Hauers',
+  'Open Hours',
   'Mobile Visits',
   'Volunteer Orientation',
   'Farm Visits',
