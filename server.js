@@ -14,6 +14,7 @@ const {
   getShifts,
   getAdminShifts,
   createSignup,
+  cancelSignup,
   ensureHeaders,
 } = require('./google');
 
@@ -63,6 +64,29 @@ app.post('/api/shifts/:id/signup', async (req, res) => {
   } catch (err) {
     console.error('[POST /api/shifts/:id/signup]', err.message);
     res.status(500).json({ error: 'Could not save your signup. Please try again.' });
+  }
+});
+
+// POST /api/signups/cancel
+// Cancels a signup. Body: { email, shiftQuery }.
+app.post('/api/signups/cancel', async (req, res) => {
+  const email      = (req.body.email      || '').trim().toLowerCase();
+  const shiftQuery = (req.body.shiftQuery || '').trim();
+
+  if (!email || !shiftQuery) {
+    return res.status(400).json({ error: 'Please provide both your email and a shift description.' });
+  }
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+
+  try {
+    const result = await cancelSignup(email, shiftQuery);
+    if (!result.ok) return res.status(404).json({ error: result.error });
+    res.json({ message: result.message });
+  } catch (err) {
+    console.error('[POST /api/signups/cancel]', err.message);
+    res.status(500).json({ error: 'Could not cancel signup. Please try again.' });
   }
 });
 

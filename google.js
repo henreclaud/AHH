@@ -355,4 +355,74 @@ async function createSignup(shiftId, name, email) {
   return { ok: true, message: `You're signed up for ${shift.title}. Thank you!` };
 }
 
-module.exports = { getShifts, getShiftById, getAdminShifts, createSignup, ensureHeaders };
+// Cancels a volunteer signup by matching email + shift (case-insensitive partial).
+// Searches column C (email) and columns E/F (shift name + date) in the sheet.
+// Returns { ok: true, message } or { ok: false, error }.
+async function cancelSignup(email, shiftQuery) {
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
+
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: SHEET_RANGE,
+  });
+
+  const rows = res.data.values || [];
+  // Row 0 is the header — rows 1+ are data (sheet rows 2+).
+  const emailNorm = email.trim().toLowerCase();
+  const queryNorm = shiftQuery.trim().toLowerCase();
+
+  // Find the first row where:
+  //   • column C (index 2) matches the email (case-insensitive)
+  //   • column E (index 4, shift name) OR column F (index 5, shift date) contains
+  //     the query as a substring (case-insensitive partial match)
+  let matchIndex = -1; // index into rows[] (0 = header)
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const rowEmail     = (row[2] || '').toLowerCase();
+    const rowShiftName = (row[4] || '').toLowerCase();
+    const rowShiftDate = (row[5] || '').toLowerCase();
+    const rowShiftTime = (row[6] || '').toLowerCase();
+    const combined     = `${rowShiftName} ${rowShiftDate} ${rowShiftTime}`;
+
+    if (rowEmail === emailNorm && combined.includes(queryNorm)) {
+      matchIndex = i;
+      break;
+    }
+  }
+
+  if (matchIndex === -1) {
+    return { ok: false, error: 'No signup found for that email and shift. Double-check your email and try a keyword from the shift name or date (e.g. "farm chores" or "June 9").' };
+  }
+
+  // Sheet rows are 1-indexed; row 0 in our array = sheet row 1 (header),
+  // so matchIndex in our array = sheet row matchIndex + 1.
+  const sheetRow = matchIndex + 1;
+
+  // Delete the entire row so the sheet stays clean (no blank rows).
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: {
+      requests: [{
+        deleteDimension: {
+          range: {
+            sheetId:    0,        // first sheet
+            dimension:  'ROWS',
+            startIndex: sheetRow - 1,  // 0-indexed
+            endIndex:   sheetRow,
+          },
+        },
+      }],
+    },
+  });
+
+  const cancelledName = rows[matchIndex][4] || 'that shift';
+  const cancelledDate = rows[matchIndex][5] || '';
+  return {
+    ok: true,
+    message: `Your signup for ${cancelledName}${cancelledDate ? ' on ' + cancelledDate : ''} has been cancelled.`,
+  };
+}
+
+module.exports = { getShifts, getShiftById, getAdminShifts, createSignup, cancelSignup, ensureHeaders };

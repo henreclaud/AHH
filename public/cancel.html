@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cancel Signup · Animal Assisted Happiness</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="index.html">
+          <img class="brand-logo" src="images/aah-logo.svg" alt="Animal Assisted Happiness logo" />
+          <span class="brand-text">Animal Assisted Happiness</span>
+        </a>
+        <a class="link" href="index.html">Volunteer page</a>
+      </div>
+    </header>
+
+    <main class="container">
+      <div class="cancel-page">
+        <h1 class="page-title">Cancel my signup</h1>
+        <p class="page-sub">
+          Enter your email and a few words from the shift name or date
+          (e.g. "Farm Chores" or "June 9") and we'll remove you from the list.
+        </p>
+
+        <form id="cancel-form" class="cancel-form card">
+          <label>
+            Your email address
+            <input
+              type="email"
+              id="cancel-email"
+              name="email"
+              autocomplete="email"
+              placeholder="you@example.com"
+              required
+            />
+          </label>
+
+          <label>
+            Shift name or date
+            <input
+              type="text"
+              id="cancel-shift"
+              name="shiftQuery"
+              placeholder="e.g. Farm Chores, June 9, Pony Visit…"
+              required
+            />
+          </label>
+
+          <p id="cancel-error"  class="form-error"   hidden></p>
+          <p id="cancel-success" class="form-success" hidden></p>
+
+          <div class="dialog-buttons">
+            <a href="index.html" class="btn btn-secondary">Back</a>
+            <button type="submit" class="btn btn-primary" id="cancel-submit">Cancel my signup</button>
+          </div>
+        </form>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        Made with love for the animals and the people they visit.
+      </div>
+    </footer>
+
+    <script src="cancel.js"></script>
+  </body>
+</html>
