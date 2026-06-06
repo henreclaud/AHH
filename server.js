@@ -53,6 +53,9 @@ app.post('/api/shifts/:id/signup', async (req, res) => {
   if (!name || !email) {
     return res.status(400).json({ error: 'Please provide both your name and email.' });
   }
+  if (!/\S+\s+\S+/.test(name)) {
+    return res.status(400).json({ error: 'Please enter your first and last name.' });
+  }
   if (!isValidEmail(email)) {
     return res.status(400).json({ error: 'Please enter a valid email address.' });
   }

@@ -226,6 +226,13 @@ signupForm.addEventListener('submit', async e => {
   formError.textContent = '';
   const name  = document.getElementById('name').value.trim();
   const email = document.getElementById('email').value.trim();
+
+  // Require at least two words (first + last name).
+  if (!/\S+\s+\S+/.test(name)) {
+    formError.textContent = 'Please enter your first and last name.';
+    return;
+  }
+
   try {
     const res  = await fetch(`/api/shifts/${selectedShiftId}/signup`, {
       method: 'POST',
