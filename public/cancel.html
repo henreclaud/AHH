@@ -21,8 +21,7 @@
       <div class="cancel-page">
         <h1 class="page-title">Cancel my signup</h1>
         <p class="page-sub">
-          Enter your email and a few words from the shift name or date
-          (e.g. "Farm Chores" or "June 9") and we'll remove you from the list.
+          Fill in all four fields exactly as you signed up and we'll remove you from the list.
         </p>
 
         <form id="cancel-form" class="cancel-form card">
@@ -39,17 +38,40 @@
           </label>
 
           <label>
-            Shift name or date
+            Your full name
             <input
               type="text"
-              id="cancel-shift"
-              name="shiftQuery"
-              placeholder="e.g. Farm Chores, June 9, Pony Visit…"
+              id="cancel-name"
+              name="name"
+              autocomplete="name"
+              placeholder="Jane Smith"
               required
             />
           </label>
 
-          <p id="cancel-error"  class="form-error"   hidden></p>
+          <label>
+            Shift date
+            <input
+              type="date"
+              id="cancel-date"
+              name="date"
+              required
+            />
+          </label>
+
+          <label>
+            Shift type
+            <select id="cancel-type" name="shiftType" required>
+              <option value="" disabled selected>Select a shift type…</option>
+              <option value="Mobile Visits">Mobile Visits</option>
+              <option value="Farm Chores">Farm Chores</option>
+              <option value="Open Houses">Open Houses</option>
+              <option value="Farm Visits">Farm Visits</option>
+              <option value="Volunteer Orientations">Volunteer Orientations</option>
+            </select>
+          </label>
+
+          <p id="cancel-error"   class="form-error"   hidden></p>
           <p id="cancel-success" class="form-success" hidden></p>
 
           <div class="dialog-buttons">

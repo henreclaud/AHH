@@ -471,9 +471,27 @@ input:focus {
   transition: border-color 0.15s;
 }
 
-.cancel-form input:focus {
+.cancel-form input:focus,
+.cancel-form select:focus {
   outline: none;
   border-color: var(--purple);
+}
+
+.cancel-form select {
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: var(--bg);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236e6e94' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+  cursor: pointer;
+  transition: border-color 0.15s;
 }
 
 /* ---- Admin page ---- */

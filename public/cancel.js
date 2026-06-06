@@ -12,7 +12,9 @@ if (location.protocol === 'file:') {
 
 const form        = document.getElementById('cancel-form');
 const emailInput  = document.getElementById('cancel-email');
-const shiftInput  = document.getElementById('cancel-shift');
+const nameInput   = document.getElementById('cancel-name');
+const dateInput   = document.getElementById('cancel-date');
+const typeSelect  = document.getElementById('cancel-type');
 const errorEl     = document.getElementById('cancel-error');
 const successEl   = document.getElementById('cancel-success');
 const submitBtn   = document.getElementById('cancel-submit');
@@ -40,14 +42,18 @@ form.addEventListener('submit', async (e) => {
   submitBtn.disabled = true;
   submitBtn.textContent = 'Searching…';
 
-  const email      = emailInput.value.trim();
-  const shiftQuery = shiftInput.value.trim();
+  const payload = {
+    email:     emailInput.value.trim(),
+    name:      nameInput.value.trim(),
+    date:      dateInput.value,       // "YYYY-MM-DD"
+    shiftType: typeSelect.value,
+  };
 
   try {
     const res  = await fetch('/api/signups/cancel', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email, shiftQuery }),
+      body:    JSON.stringify(payload),
     });
     const data = await res.json();
 
