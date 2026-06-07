@@ -1,7 +1,7 @@
 // google.js — data layer for the AAH volunteer app.
 // Replaces db.js (SQLite).
 //
-// Shifts  → read from Google Calendar (cached 5 min, auto-refreshed).
+// Shifts  → read from Google Calendar (cached 1 min, auto-refreshed).
 // Signups → read/write to a Google Sheet.
 
 'use strict';
@@ -120,7 +120,7 @@ function deriveCategory(name) {
 let _calendarCache  = [];   // array of raw shift objects (no signup counts)
 let _cacheExpiresAt = 0;    // epoch ms
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 1 * 60 * 1000; // 1 minute
 
 async function refreshCalendarCache() {
   if (!CALENDAR_ID) throw new Error('GOOGLE_CALENDAR_ID is not set.');
