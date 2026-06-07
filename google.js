@@ -165,8 +165,9 @@ async function refreshCalendarCache() {
     if (!name) continue;
 
     // Look for a capacity limit in the title first, then the description.
-    // If neither has one, default to 10 spots so the event still shows up.
-    const capacity = parseCapacity(rawTitle) ?? parseCapacity(desc) ?? 10;
+    // If neither has one, capacity is null — no limit is shown in the UI.
+    const capacity = parseCapacity(rawTitle) ?? parseCapacity(desc) ?? null;
+    const has_limit = capacity !== null;
 
     // Google Calendar sends dateTime for timed events and date for all-day events.
     const startDt = new Date(event.start.dateTime || event.start.date);
@@ -183,7 +184,8 @@ async function refreshCalendarCache() {
       date:       toDateStr(startDt),   // "YYYY-MM-DD" in Pacific Time
       start_time: toHHMM(startDt),     // "HH:MM" in Pacific Time
       end_time:   toHHMM(endDt),
-      capacity,
+      capacity:  has_limit ? capacity : 999999, // unlimited events never fill up
+      has_limit,
     });
   }
 

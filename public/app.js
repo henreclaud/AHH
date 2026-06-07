@@ -106,16 +106,18 @@ function createCard(shift) {
   tag.textContent = shift.category || 'Visit';
   top.appendChild(tag);
 
-  const pill = document.createElement('span');
-  const left = shift.spots_left;
-  if (shift.is_full) {
-    pill.className = 'spots-pill full';
-    pill.textContent = 'Full';
-  } else {
-    pill.className = 'spots-pill' + (left <= 2 ? ' low' : '');
-    pill.textContent = `${left} spot${left === 1 ? '' : 's'} left`;
+  if (shift.has_limit) {
+    const pill = document.createElement('span');
+    const left = shift.spots_left;
+    if (shift.is_full) {
+      pill.className = 'spots-pill full';
+      pill.textContent = 'Full';
+    } else {
+      pill.className = 'spots-pill' + (left <= 2 ? ' low' : '');
+      pill.textContent = `${left} spot${left === 1 ? '' : 's'} left`;
+    }
+    top.appendChild(pill);
   }
-  top.appendChild(pill);
   card.appendChild(top);
 
   // Title
