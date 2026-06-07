@@ -219,13 +219,24 @@ setInterval(async () => {
 //   F  Shift Date
 //   G  Shift Time
 
-const SHEET_RANGE   = 'Sheet1!A:G';
+const SHEET_RANGE   = 'Sheet1!A:I';
 const SHEET_HEADERS = [
   'Timestamp', 'Volunteer Name', 'Email',
   'Shift ID', 'Shift Name', 'Shift Date', 'Shift Time',
+  // col H = Reminded (managed by send-reminders.js)
+  // col I = Signup ID
 ];
 
-// Writes the header row if the sheet is empty.  Safe to call every startup.
+// Generates a unique 6-character cancellation code (no 0/O/1/I to avoid confusion).
+function generateSignupId() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let id = '';
+  for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return id;
+}
+
+// Writes the header row if the sheet is empty, and ensures the Signup ID header
+// exists in column I.  Safe to call every startup.
 async function ensureHeaders() {
   if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
 
@@ -233,11 +244,13 @@ async function ensureHeaders() {
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: 'Sheet1!A1:G1',
+    range: 'Sheet1!A1:I1',
   });
 
-  const existing = (res.data.values || [])[0];
-  if (!existing || existing[0] !== 'Timestamp') {
+  const existing = (res.data.values || [])[0] || [];
+
+  // Write the base headers if the sheet is brand new.
+  if (!existing[0] || existing[0] !== 'Timestamp') {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
       range: 'Sheet1!A1:G1',
@@ -245,6 +258,17 @@ async function ensureHeaders() {
       requestBody: { values: [SHEET_HEADERS] },
     });
     console.log('[sheets] header row written');
+  }
+
+  // Ensure Signup ID header in column I (index 8).
+  if ((existing[8] || '').trim() !== 'Signup ID') {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: 'Sheet1!I1',
+      valueInputOption: 'RAW',
+      requestBody: { values: [['Signup ID']] },
+    });
+    console.log('[sheets] "Signup ID" header added to column I');
   }
 }
 
@@ -272,6 +296,8 @@ async function getAllSignups() {
       shift_name: r[4] || '',
       shift_date: r[5] || '',
       shift_time: r[6] || '',
+      // r[7] = Reminded (col H) — not needed here
+      signup_id:  r[8] || '',
     }));
 }
 
@@ -345,6 +371,11 @@ async function createSignup(shiftId, name, email) {
     return { ok: false, error: 'Sorry, this shift is now full.' };
   }
 
+  // Generate a unique signup ID (retry if collision, though extremely unlikely).
+  const allIds = new Set(allSignups.map(s => s.signup_id).filter(Boolean));
+  let signupId;
+  do { signupId = generateSignupId(); } while (allIds.has(signupId));
+
   // Append a new row to the Google Sheet.
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
 
@@ -361,11 +392,13 @@ async function createSignup(shiftId, name, email) {
         shift.title,
         shift.date,
         `${shift.start_time}–${shift.end_time}`,
+        '',          // col H — Reminded (managed by send-reminders.js)
+        signupId,    // col I — Signup ID
       ]],
     },
   });
 
-  return { ok: true, message: `You're signed up for ${shift.title}. Thank you!` };
+  return { ok: true, message: `You're signed up for ${shift.title}. Thank you!`, signupId };
 }
 
 // Normalise a time string to "H:MMam/pm" format for comparison.
@@ -398,17 +431,13 @@ function normalizeTime(raw) {
   return null;
 }
 
-// Cancels a volunteer signup by matching all four fields:
-//   name (col B, case-insensitive), email (col C), date (col F), start time (col G).
+// Cancels a volunteer signup by its unique Signup ID (column I).
 // Returns { ok: true, message } or { ok: false, error }.
-async function cancelSignup(name, email, date, startTime) {
+async function cancelSignupById(signupId) {
   if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
 
-  // Normalise the user's time input to "HH:MM" for comparison.
-  const timeNorm = normalizeTime(startTime);
-  if (!timeNorm) {
-    return { ok: false, error: 'Could not understand that time. Try "9am", "3pm", or "10:30am".' };
-  }
+  const id = (signupId || '').trim().toUpperCase();
+  if (!id) return { ok: false, error: 'Please enter your cancellation code.' };
 
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
 
@@ -419,29 +448,10 @@ async function cancelSignup(name, email, date, startTime) {
 
   const rows = res.data.values || [];
 
-  const nameNorm  = name.trim().toLowerCase();
-  const emailNorm = email.trim().toLowerCase();
-  const dateNorm  = date.trim(); // "YYYY-MM-DD"
-
-  // Sheet columns (0-indexed):
-  //  0 Timestamp  1 Name  2 Email  3 ShiftID  4 ShiftName  5 ShiftDate  6 ShiftTime
-  // Col 6 is stored as "HH:MM–HH:MM" — extract just the start time before the dash.
+  // Find row where col I (index 8) matches the signup ID.
   let matchIndex = -1;
   for (let i = 1; i < rows.length; i++) {
-    const row      = rows[i];
-    const rowName  = (row[1] || '').toLowerCase();
-    const rowEmail = (row[2] || '').toLowerCase();
-    const rowDate  = (row[5] || '').trim();
-    // Normalize stored start time (handles old "09:00" and new "9:00am" formats).
-    const rowTimeRaw  = (row[6] || '').split('–')[0].trim();
-    const rowTimeNorm = normalizeTime(rowTimeRaw);
-
-    if (
-      rowName      === nameNorm  &&
-      rowEmail     === emailNorm &&
-      rowDate      === dateNorm  &&
-      rowTimeNorm  === timeNorm
-    ) {
+    if ((rows[i][8] || '').trim().toUpperCase() === id) {
       matchIndex = i;
       break;
     }
@@ -450,7 +460,7 @@ async function cancelSignup(name, email, date, startTime) {
   if (matchIndex === -1) {
     return {
       ok: false,
-      error: 'No signup found. Please double-check your name, email, date, and time.',
+      error: 'No signup found with that code. Please check your cancellation code.',
     };
   }
 
@@ -477,4 +487,4 @@ async function cancelSignup(name, email, date, startTime) {
   return { ok: true, message: 'Your signup has been cancelled.' };
 }
 
-module.exports = { getShifts, getShiftById, getAdminShifts, createSignup, cancelSignup, ensureHeaders };
+module.exports = { getShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, ensureHeaders };

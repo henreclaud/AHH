@@ -14,7 +14,7 @@ const {
   getShifts,
   getAdminShifts,
   createSignup,
-  cancelSignup,
+  cancelSignupById,
   ensureHeaders,
 } = require('./google');
 
@@ -63,7 +63,7 @@ app.post('/api/shifts/:id/signup', async (req, res) => {
   try {
     const result = await createSignup(req.params.id, name, email);
     if (!result.ok) return res.status(409).json({ error: result.error });
-    res.status(201).json({ message: result.message });
+    res.status(201).json({ message: result.message, signupId: result.signupId });
   } catch (err) {
     console.error('[POST /api/shifts/:id/signup]', err.message);
     res.status(500).json({ error: 'Could not save your signup. Please try again.' });
@@ -71,22 +71,16 @@ app.post('/api/shifts/:id/signup', async (req, res) => {
 });
 
 // POST /api/signups/cancel
-// Cancels a signup. Body: { name, email, date, startTime }.
+// Cancels a signup. Body: { signupId }.
 app.post('/api/signups/cancel', async (req, res) => {
-  const name      = (req.body.name      || '').trim();
-  const email     = (req.body.email     || '').trim().toLowerCase();
-  const date      = (req.body.date      || '').trim(); // "YYYY-MM-DD"
-  const startTime = (req.body.startTime || '').trim(); // e.g. "9am", "3pm"
+  const signupId = (req.body.signupId || '').trim();
 
-  if (!name || !email || !date || !startTime) {
-    return res.status(400).json({ error: 'Please fill in all four fields.' });
-  }
-  if (!isValidEmail(email)) {
-    return res.status(400).json({ error: 'Please enter a valid email address.' });
+  if (!signupId) {
+    return res.status(400).json({ error: 'Please enter your cancellation code.' });
   }
 
   try {
-    const result = await cancelSignup(name, email, date, startTime);
+    const result = await cancelSignupById(signupId);
     if (!result.ok) return res.status(404).json({ error: result.error });
     res.json({ message: result.message });
   } catch (err) {

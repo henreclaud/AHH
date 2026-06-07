@@ -10,14 +10,16 @@ if (location.protocol === 'file:') {
   throw new Error('Opened via file:// — server not running.');
 }
 
-const form       = document.getElementById('cancel-form');
-const nameInput  = document.getElementById('cancel-name');
-const emailInput = document.getElementById('cancel-email');
-const dateInput  = document.getElementById('cancel-date');
-const timeInput  = document.getElementById('cancel-time');
-const errorEl    = document.getElementById('cancel-error');
-const successEl  = document.getElementById('cancel-success');
-const submitBtn  = document.getElementById('cancel-submit');
+const form      = document.getElementById('cancel-form');
+const codeInput = document.getElementById('cancel-code');
+const errorEl   = document.getElementById('cancel-error');
+const successEl = document.getElementById('cancel-success');
+const submitBtn = document.getElementById('cancel-submit');
+
+// Force uppercase as the user types.
+codeInput.addEventListener('input', () => {
+  codeInput.value = codeInput.value.toUpperCase();
+});
 
 function showError(msg) {
   errorEl.textContent = msg;
@@ -42,18 +44,13 @@ form.addEventListener('submit', async (e) => {
   submitBtn.disabled = true;
   submitBtn.textContent = 'Searching…';
 
-  const payload = {
-    name:      nameInput.value.trim(),
-    email:     emailInput.value.trim(),
-    date:      dateInput.value,          // "YYYY-MM-DD"
-    startTime: timeInput.value.trim(),   // "9am", "3pm", "10:30am", etc.
-  };
+  const signupId = codeInput.value.trim().toUpperCase();
 
   try {
     const res  = await fetch('/api/signups/cancel', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
+      body:    JSON.stringify({ signupId }),
     });
     const data = await res.json();
 
