@@ -30,8 +30,8 @@ const COL = { NAME: 1, EMAIL: 2, SHIFT_NAME: 4, DATE: 5, TIME: 6, REMINDED: 7 };
 const SHEET_RANGE = 'Sheet1!A:H';
 
 // The reminder window: send when the shift is between 23 and 25 hours away.
-const WINDOW_MIN_MS = 23 * 60 * 60 * 1000;
-const WINDOW_MAX_MS = 25 * 60 * 60 * 1000;
+const WINDOW_MIN_MS =  0 * 60 * 60 * 1000; // TEST MODE: send for any upcoming shift
+const WINDOW_MAX_MS = 48 * 60 * 60 * 1000; // TEST MODE: within 48 hours
 
 // ── Google Auth ───────────────────────────────────────────────────────────────
 
