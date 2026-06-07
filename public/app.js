@@ -22,6 +22,7 @@ const formError       = document.getElementById('form-error');
 const cancelButton    = document.getElementById('cancel-button');
 const dateGroup       = document.getElementById('filter-date');
 const typeRow         = document.getElementById('filter-type');
+const openingsToggle  = document.getElementById('filter-openings');
 const resultsCount    = document.getElementById('results-count');
 const clearButton     = document.getElementById('clear-filters');
 const statNumber      = document.getElementById('stat-number');
@@ -29,7 +30,7 @@ const statNumber      = document.getElementById('stat-number');
 // ── State ────────────────────────────────────────────────────────────────────
 let allShifts = [];
 let selectedShiftId = null;
-const filters = { dateRange: 'all', type: 'all' };
+const filters = { dateRange: 'all', type: 'all', openingsOnly: false };
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 async function loadShifts() {
@@ -66,6 +67,8 @@ function getVisible() {
       }
       // Activity type
       if (filters.type !== 'all' && (s.category || 'Visit') !== filters.type) return false;
+      // Openings only — shifts with no limit always pass; limited shifts must have spots left
+      if (filters.openingsOnly && s.has_limit && s.is_full) return false;
       return true;
     })
     .sort(compareDateTime); // always soonest first
@@ -89,7 +92,8 @@ function render() {
   resultsCount.textContent = total
     ? `Showing ${visible.length} of ${total} visit${total === 1 ? '' : 's'}`
     : '';
-  clearButton.hidden = (filters.dateRange === 'all' && filters.type === 'all');
+  openingsToggle.classList.toggle('active', filters.openingsOnly);
+  clearButton.hidden = (filters.dateRange === 'all' && filters.type === 'all' && !filters.openingsOnly);
 }
 
 // ── Card builder ─────────────────────────────────────────────────────────────
@@ -212,13 +216,21 @@ dateGroup.addEventListener('click', e => {
   render();
 });
 
+openingsToggle.addEventListener('click', () => {
+  filters.openingsOnly = !filters.openingsOnly;
+  openingsToggle.setAttribute('aria-pressed', filters.openingsOnly);
+  render();
+});
+
 clearButton.addEventListener('click', () => {
   filters.dateRange = 'all';
   filters.type = 'all';
+  filters.openingsOnly = false;
   dateGroup.querySelectorAll('.seg').forEach(b =>
     b.classList.toggle('active', b.dataset.range === 'all'));
   typeRow.querySelectorAll('.chip').forEach(c =>
     c.classList.toggle('active', c.dataset.type === 'all'));
+  openingsToggle.setAttribute('aria-pressed', 'false');
   render();
 });
 
