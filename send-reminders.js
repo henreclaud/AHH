@@ -124,9 +124,11 @@ async function main() {
     const timeStr   = (row[COL.TIME]       || '').trim();
     const reminded  = (row[COL.REMINDED]   || '').trim().toLowerCase();
 
+    console.log(`[reminders] Row ${i + 1}: email=${email} date=${dateStr} time=${timeStr} reminded=${reminded}`);
+
     // Skip rows that are incomplete, already reminded, or can't be parsed.
-    if (!email || !dateStr || !timeStr) { skipped++; continue; }
-    if (reminded === 'yes')             { skipped++; continue; }
+    if (!email || !dateStr || !timeStr) { console.log(`[reminders] Row ${i + 1}: skipping — missing fields`); skipped++; continue; }
+    if (reminded === 'yes')             { console.log(`[reminders] Row ${i + 1}: skipping — already reminded`); skipped++; continue; }
 
     const shiftStart = parseShiftStartUTC(dateStr, timeStr);
     if (!shiftStart) {
@@ -136,6 +138,7 @@ async function main() {
     }
 
     const diff = shiftStart - now; // ms until shift starts
+    console.log(`[reminders] Row ${i + 1}: shiftStart=${shiftStart.toISOString()} diff=${(diff/3600000).toFixed(1)}h window=${WINDOW_MIN_MS/3600000}-${WINDOW_MAX_MS/3600000}h`);
 
     if (diff >= WINDOW_MIN_MS && diff <= WINDOW_MAX_MS) {
       const startTime = timeStr.split(/[–\-]/)[0].trim();
