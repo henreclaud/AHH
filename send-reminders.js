@@ -30,8 +30,8 @@ const COL = { NAME: 1, EMAIL: 2, SHIFT_NAME: 4, DATE: 5, TIME: 6, REMINDED: 7 };
 const SHEET_RANGE = 'Sheet1!A:H';
 
 // The reminder window: send when the shift is between 23 and 25 hours away.
-const WINDOW_MIN_MS =  0 * 60 * 60 * 1000; // TEST MODE: send for any upcoming shift
-const WINDOW_MAX_MS = 48 * 60 * 60 * 1000; // TEST MODE: within 48 hours
+const WINDOW_MIN_MS = 23 * 60 * 60 * 1000;
+const WINDOW_MAX_MS = 25 * 60 * 60 * 1000;
 
 // ── Google Auth ───────────────────────────────────────────────────────────────
 
@@ -124,11 +124,9 @@ async function main() {
     const timeStr   = (row[COL.TIME]       || '').trim();
     const reminded  = (row[COL.REMINDED]   || '').trim().toLowerCase();
 
-    console.log(`[reminders] Row ${i + 1}: email=${email} date=${dateStr} time=${timeStr} reminded=${reminded}`);
-
     // Skip rows that are incomplete, already reminded, or can't be parsed.
-    if (!email || !dateStr || !timeStr) { console.log(`[reminders] Row ${i + 1}: skipping — missing fields`); skipped++; continue; }
-    if (reminded === 'yes')             { console.log(`[reminders] Row ${i + 1}: skipping — already reminded`); skipped++; continue; }
+    if (!email || !dateStr || !timeStr) { skipped++; continue; }
+    if (reminded === 'yes')             { skipped++; continue; }
 
     const shiftStart = parseShiftStartUTC(dateStr, timeStr);
     if (!shiftStart) {
@@ -138,7 +136,6 @@ async function main() {
     }
 
     const diff = shiftStart - now; // ms until shift starts
-    console.log(`[reminders] Row ${i + 1}: shiftStart=${shiftStart.toISOString()} diff=${(diff/3600000).toFixed(1)}h window=${WINDOW_MIN_MS/3600000}-${WINDOW_MAX_MS/3600000}h`);
 
     if (diff >= WINDOW_MIN_MS && diff <= WINDOW_MAX_MS) {
       const startTime = timeStr.split(/[–\-]/)[0].trim();
