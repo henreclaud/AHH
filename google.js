@@ -219,12 +219,13 @@ setInterval(async () => {
 //   F  Shift Date
 //   G  Shift Time
 
-const SHEET_RANGE   = 'Sheet1!A:I';
+const SHEET_TAB     = 'signups';
+const SHEET_RANGE   = `${SHEET_TAB}!A:I`;
 const SHEET_HEADERS = [
   'Timestamp', 'Volunteer Name', 'Email',
   'Shift ID', 'Shift Name', 'Shift Date', 'Shift Time',
-  // col H = Reminded (managed by send-reminders.js)
-  // col I = Signup ID
+  // col H (7) = Signup ID
+  // col I (8) = Reminded (managed by send-reminders.js)
 ];
 
 // Generates a unique 6-character cancellation code (no 0/O/1/I to avoid confusion).
@@ -236,7 +237,7 @@ function generateSignupId() {
 }
 
 // Writes the header row if the sheet is empty, and ensures the Signup ID header
-// exists in column I.  Safe to call every startup.
+// exists in column H.  Safe to call every startup.
 async function ensureHeaders() {
   if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
 
@@ -244,7 +245,7 @@ async function ensureHeaders() {
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: 'Sheet1!A1:I1',
+    range: `${SHEET_TAB}!A1:I1`,
   });
 
   const existing = (res.data.values || [])[0] || [];
@@ -253,22 +254,22 @@ async function ensureHeaders() {
   if (!existing[0] || existing[0] !== 'Timestamp') {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
-      range: 'Sheet1!A1:G1',
+      range: `${SHEET_TAB}!A1:G1`,
       valueInputOption: 'RAW',
       requestBody: { values: [SHEET_HEADERS] },
     });
     console.log('[sheets] header row written');
   }
 
-  // Ensure Signup ID header in column I (index 8).
-  if ((existing[8] || '').trim() !== 'Signup ID') {
+  // Ensure Signup ID header in column H (index 7).
+  if ((existing[7] || '').trim() !== 'Signup ID') {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
-      range: 'Sheet1!I1',
+      range: `${SHEET_TAB}!H1`,
       valueInputOption: 'RAW',
       requestBody: { values: [['Signup ID']] },
     });
-    console.log('[sheets] "Signup ID" header added to column I');
+    console.log('[sheets] "Signup ID" header added to column H');
   }
 }
 
@@ -296,8 +297,8 @@ async function getAllSignups() {
       shift_name: r[4] || '',
       shift_date: r[5] || '',
       shift_time: r[6] || '',
-      // r[7] = Reminded (col H) — not needed here
-      signup_id:  r[8] || '',
+      signup_id:  r[7] || '',  // col H
+      // r[8] = Reminded (col I) — managed by send-reminders.js
     }));
 }
 
@@ -392,8 +393,8 @@ async function createSignup(shiftId, name, email) {
         shift.title,
         shift.date,
         `${shift.start_time}–${shift.end_time}`,
-        '',          // col H — Reminded (managed by send-reminders.js)
-        signupId,    // col I — Signup ID
+        signupId,    // col H — Signup ID
+        // col I — Reminded (managed by send-reminders.js)
       ]],
     },
   });
@@ -448,10 +449,10 @@ async function cancelSignupById(signupId) {
 
   const rows = res.data.values || [];
 
-  // Find row where col I (index 8) matches the signup ID.
+  // Find row where col H (index 7) matches the signup ID.
   let matchIndex = -1;
   for (let i = 1; i < rows.length; i++) {
-    if ((rows[i][8] || '').trim().toUpperCase() === id) {
+    if ((rows[i][7] || '').trim().toUpperCase() === id) {
       matchIndex = i;
       break;
     }

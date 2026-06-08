@@ -25,9 +25,9 @@ const CANCEL_URL = `${APP_URL}/cancel.html`;
 
 // Sheet column layout (0-indexed):
 //  A(0) Timestamp  B(1) Name  C(2) Email  D(3) ShiftID
-//  E(4) ShiftName  F(5) ShiftDate  G(6) ShiftTime  H(7) Reminded
-const COL = { NAME: 1, EMAIL: 2, SHIFT_NAME: 4, DATE: 5, TIME: 6, REMINDED: 7 };
-const SHEET_RANGE = 'Sheet1!A:H';
+//  E(4) ShiftName  F(5) ShiftDate  G(6) ShiftTime  H(7) Signup ID  I(8) Reminded
+const COL = { NAME: 1, EMAIL: 2, SHIFT_NAME: 4, DATE: 5, TIME: 6, REMINDED: 8 };
+const SHEET_RANGE = 'signups!A:I';
 
 // The reminder window: send when the shift is between 23 and 25 hours away.
 const WINDOW_MIN_MS = 23 * 60 * 60 * 1000;
@@ -98,16 +98,16 @@ async function main() {
     return;
   }
 
-  // ── Ensure the "Reminded" header exists in column H ───────────────────────
+  // ── Ensure the "Reminded" header exists in column I ───────────────────────
   const header = rows[0] || [];
   if ((header[COL.REMINDED] || '').trim() !== 'Reminded') {
     await sheets.spreadsheets.values.update({
       spreadsheetId:   SHEET_ID,
-      range:           'Sheet1!H1',
+      range:           'signups!I1',
       valueInputOption: 'RAW',
       requestBody:     { values: [['Reminded']] },
     });
-    console.log('[reminders] Added "Reminded" header to column H.');
+    console.log('[reminders] Added "Reminded" header to column I.');
   }
 
   // ── Check each signup row ─────────────────────────────────────────────────
@@ -153,7 +153,7 @@ async function main() {
         // Mark row as reminded so we never send twice.
         await sheets.spreadsheets.values.update({
           spreadsheetId:   SHEET_ID,
-          range:           `Sheet1!H${i + 1}`,
+          range:           `signups!I${i + 1}`,
           valueInputOption: 'RAW',
           requestBody:     { values: [['Yes']] },
         });
