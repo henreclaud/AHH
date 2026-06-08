@@ -98,9 +98,15 @@ loginForm.addEventListener('submit', async e => {
       return;
     }
     loginError.textContent = '';
+    submitBtn.textContent  = '✓ Signed in!';
     saveToken(data.token);
-    showAdmin();
-    loadAdminShifts(data.token);
+
+    // Brief pause so the user sees the success state, then reveal admin content.
+    setTimeout(() => {
+      showAdmin();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      loadAdminShifts(data.token);
+    }, 600);
   } catch (err) {
     clearTimeout(wakeMsg);
     loginError.textContent = err.name === 'AbortError'
