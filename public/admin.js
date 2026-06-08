@@ -64,12 +64,25 @@ loginForm.addEventListener('submit', async e => {
   submitBtn.textContent = 'Signing in…';
 
   try {
-    const res  = await fetch('/api/admin/login', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ password }),
-    });
-    const data = await res.json();
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => controller.abort(), 15000);
+
+    let res;
+    try {
+      res = await fetch('/api/admin/login', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ password }),
+        signal:  controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    let data;
+    try { data = await res.json(); }
+    catch { data = {}; }
+
     if (!res.ok) {
       loginError.textContent = data.error || 'Incorrect password. Try again.';
       submitBtn.disabled    = false;
@@ -79,8 +92,10 @@ loginForm.addEventListener('submit', async e => {
     saveToken(data.token);
     showAdmin();
     loadAdminShifts(data.token);
-  } catch {
-    loginError.textContent = 'Could not reach the server. Please try again.';
+  } catch (err) {
+    loginError.textContent = err.name === 'AbortError'
+      ? 'Server is taking too long — try again in a few seconds.'
+      : 'Could not reach the server. Please try again.';
     submitBtn.disabled    = false;
     submitBtn.textContent = 'Sign in';
   }
@@ -100,9 +115,17 @@ async function loadAdminShifts(token) {
   adminShifts.innerHTML   = '';
 
   try {
-    const res = await fetch('/api/admin/shifts', {
-      headers: { 'Authorization': 'Bearer ' + token },
-    });
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => controller.abort(), 20000);
+    let res;
+    try {
+      res = await fetch('/api/admin/shifts', {
+        headers: { 'Authorization': 'Bearer ' + token },
+        signal:  controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (res.status === 401) return false;
 
