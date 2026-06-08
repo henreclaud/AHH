@@ -42,18 +42,20 @@ function requireAdmin(req, res, next) {
 // Body: { password }. Returns { token } on success.
 app.post('/api/admin/login', (req, res) => {
   const supplied = (req.body.password || '').trim();
-  const expected = process.env.ADMIN_PASSWORD || '';
+  const expected = (process.env.ADMIN_PASSWORD || '').trim();
 
   if (!expected) {
     console.warn('[auth] ADMIN_PASSWORD is not set — admin login is disabled.');
-    return res.status(503).json({ error: 'Admin access is not configured.' });
+    return res.status(503).json({ error: 'Admin access is not configured. Set ADMIN_PASSWORD on Render.' });
   }
   if (!supplied || supplied !== expected) {
+    console.log(`[auth] Failed login attempt (supplied length: ${supplied.length}, expected length: ${expected.length})`);
     return res.status(401).json({ error: 'Incorrect password. Try again.' });
   }
 
   const token = crypto.randomBytes(32).toString('hex');
   adminTokens.add(token);
+  console.log('[auth] Admin login successful');
   res.json({ token });
 });
 
