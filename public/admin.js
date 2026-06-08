@@ -1,7 +1,6 @@
 // admin.js — runs on the admin page (admin.html).
 // Shows all visits (from Google Calendar) and who has signed up (from Google Sheets).
-// Requires a password; the token is stored in localStorage so the user stays
-// logged in across page refreshes.
+// Password is required on every visit — no persistent session.
 
 if (location.protocol === 'file:') {
   document.body.innerHTML =
@@ -14,22 +13,18 @@ if (location.protocol === 'file:') {
 }
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
-const authGate   = document.getElementById('auth-gate');
-const adminMain  = document.getElementById('admin-main');
-const loginForm  = document.getElementById('login-form');
-const loginError = document.getElementById('login-error');
-const logoutBtn  = document.getElementById('logout-btn');
+const authGate    = document.getElementById('auth-gate');
+const adminMain   = document.getElementById('admin-main');
+const loginForm   = document.getElementById('login-form');
+const loginError  = document.getElementById('login-error');
 const adminShifts = document.getElementById('admin-shifts');
 const adminStatus = document.getElementById('admin-status');
 
-// ── Auth helpers ──────────────────────────────────────────────────────────────
-const TOKEN_KEY = 'aah_admin_token';
-
-function getToken()          { return localStorage.getItem(TOKEN_KEY) || ''; }
-function saveToken(t)        { localStorage.setItem(TOKEN_KEY, t); }
-function clearToken()        { localStorage.removeItem(TOKEN_KEY); }
+// ── Auth state (page-lifetime only — cleared on every navigation/refresh) ─────
+let sessionToken = '';
 
 function showGate(msg) {
+  loginError.style.color = '';
   loginError.textContent = msg || '';
   loginForm.reset();
   authGate.hidden  = false;
@@ -41,17 +36,8 @@ function showAdmin() {
   adminMain.hidden = false;
 }
 
-// ── Boot: try the saved token first ──────────────────────────────────────────
-async function init() {
-  const token = getToken();
-  if (token) {
-    // Probe the API — if it returns 401 the token is stale.
-    const ok = await loadAdminShifts(token);
-    if (ok) { showAdmin(); return; }
-    clearToken();
-  }
-  showGate();
-}
+// ── Boot: always show the gate ────────────────────────────────────────────────
+showGate();
 
 // ── Login form ────────────────────────────────────────────────────────────────
 loginForm.addEventListener('submit', async e => {
@@ -97,17 +83,17 @@ loginForm.addEventListener('submit', async e => {
       submitBtn.textContent = 'Sign in';
       return;
     }
-    loginError.textContent = '';
-    submitBtn.textContent  = '✓ Signed in!';
+
+    sessionToken          = data.token;
+    submitBtn.textContent = '✓ Signed in!';
     loginError.style.color = 'var(--purple)';
     loginError.textContent = '↓ Scroll down to see signups';
-    saveToken(data.token);
 
     // Brief pause so the user sees the success state, then reveal admin content.
     setTimeout(() => {
       showAdmin();
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      loadAdminShifts(data.token);
+      loadAdminShifts(sessionToken);
     }, 600);
   } catch (err) {
     clearTimeout(wakeMsg);
@@ -117,12 +103,6 @@ loginForm.addEventListener('submit', async e => {
     submitBtn.disabled    = false;
     submitBtn.textContent = 'Sign in';
   }
-});
-
-// ── Logout ────────────────────────────────────────────────────────────────────
-logoutBtn.addEventListener('click', () => {
-  clearToken();
-  showGate();
 });
 
 // ── Admin data ────────────────────────────────────────────────────────────────
@@ -232,5 +212,3 @@ function buildShiftBlock(shift) {
 
   return wrapper;
 }
-
-init();
