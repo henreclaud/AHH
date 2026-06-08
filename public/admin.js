@@ -63,9 +63,16 @@ loginForm.addEventListener('submit', async e => {
   submitBtn.disabled    = true;
   submitBtn.textContent = 'Signing in…';
 
+  // After 6 s with no response, tell the user the server is waking up.
+  const wakeMsg = setTimeout(() => {
+    if (submitBtn.disabled) {
+      loginError.textContent = 'Server is waking up — this takes up to a minute on the free plan. Almost there…';
+    }
+  }, 6000);
+
   try {
     const controller = new AbortController();
-    const timeout    = setTimeout(() => controller.abort(), 15000);
+    const timeout    = setTimeout(() => controller.abort(), 70000);
 
     let res;
     try {
@@ -83,18 +90,21 @@ loginForm.addEventListener('submit', async e => {
     try { data = await res.json(); }
     catch { data = {}; }
 
+    clearTimeout(wakeMsg);
     if (!res.ok) {
       loginError.textContent = data.error || 'Incorrect password. Try again.';
       submitBtn.disabled    = false;
       submitBtn.textContent = 'Sign in';
       return;
     }
+    loginError.textContent = '';
     saveToken(data.token);
     showAdmin();
     loadAdminShifts(data.token);
   } catch (err) {
+    clearTimeout(wakeMsg);
     loginError.textContent = err.name === 'AbortError'
-      ? 'Server is taking too long — try again in a few seconds.'
+      ? 'Server took too long to respond. Please try again.'
       : 'Could not reach the server. Please try again.';
     submitBtn.disabled    = false;
     submitBtn.textContent = 'Sign in';
