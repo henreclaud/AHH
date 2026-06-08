@@ -183,13 +183,19 @@ function buildTypeChips() {
     counts.set(t, (counts.get(t) || 0) + 1);
   });
 
+  // Rescue the openings toggle before wiping the row — we'll re-append it at the end.
+  const openingsBtn = typeRow.querySelector('#filter-openings');
   typeRow.innerHTML = '';
+
   // "All types" chip always first.
   typeRow.appendChild(makeChip('all', 'All types', allShifts.length));
   // Only show the five approved filter types (in the defined order), skip missing ones.
   MAIN_FILTER_TYPES.forEach(t => {
     if (counts.has(t)) typeRow.appendChild(makeChip(t, t, counts.get(t)));
   });
+
+  // Openings toggle flows at the end of the chip row.
+  if (openingsBtn) typeRow.appendChild(openingsBtn);
 }
 
 function makeChip(value, label, count) {
