@@ -99,6 +99,8 @@ loginForm.addEventListener('submit', async e => {
     }
     loginError.textContent = '';
     submitBtn.textContent  = '✓ Signed in!';
+    loginError.style.color = 'var(--purple)';
+    loginError.textContent = '↓ Scroll down to see signups';
     saveToken(data.token);
 
     // Brief pause so the user sees the success state, then reveal admin content.
