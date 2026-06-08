@@ -57,7 +57,11 @@ async function init() {
 loginForm.addEventListener('submit', async e => {
   e.preventDefault();
   loginError.textContent = '';
-  const password = document.getElementById('admin-password').value;
+  const password  = document.getElementById('admin-password').value;
+  const submitBtn = loginForm.querySelector('button[type="submit"]');
+
+  submitBtn.disabled    = true;
+  submitBtn.textContent = 'Signing in…';
 
   try {
     const res  = await fetch('/api/admin/login', {
@@ -68,6 +72,8 @@ loginForm.addEventListener('submit', async e => {
     const data = await res.json();
     if (!res.ok) {
       loginError.textContent = data.error || 'Incorrect password. Try again.';
+      submitBtn.disabled    = false;
+      submitBtn.textContent = 'Sign in';
       return;
     }
     saveToken(data.token);
@@ -75,6 +81,8 @@ loginForm.addEventListener('submit', async e => {
     loadAdminShifts(data.token);
   } catch {
     loginError.textContent = 'Could not reach the server. Please try again.';
+    submitBtn.disabled    = false;
+    submitBtn.textContent = 'Sign in';
   }
 });
 
