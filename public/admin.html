@@ -10,25 +10,52 @@
     <header class="site-header">
       <div class="container header-inner">
         <a class="brand" href="index.html">
-          <!-- ↓ AAH LOGO — save your image to public/images/aah-logo.png -->
           <img class="brand-logo" src="images/aah-logo.svg" alt="Animal Assisted Happiness logo" />
-          <!-- ↑ AAH LOGO ─────────────────────────────────────────────── -->
           <span class="brand-text">Animal Assisted Happiness</span>
         </a>
         <a class="link" href="index.html">Volunteer page</a>
       </div>
     </header>
 
-    <main class="container">
-      <h1 class="page-title">Admin — Signups</h1>
-      <p class="page-sub">
-        Visits are managed in
-        <strong>Google Calendar</strong> — add, edit, or cancel events there and
-        they appear here within 5 minutes. Signups are saved to
-        <strong>Google Sheets</strong>.
-      </p>
+    <!-- ── Password gate — shown until authenticated ── -->
+    <div id="auth-gate" class="auth-gate-wrap" hidden>
+      <div class="auth-gate card">
+        <div class="auth-gate-icon">🔒</div>
+        <h2 class="auth-gate-title">Admin access</h2>
+        <p class="auth-gate-sub">Enter the admin password to continue.</p>
+        <form id="login-form" class="auth-gate-form" novalidate>
+          <label class="auth-gate-label" for="admin-password">Password</label>
+          <input
+            type="password"
+            id="admin-password"
+            name="password"
+            autocomplete="current-password"
+            placeholder="••••••••"
+            required
+          />
+          <p id="login-error" class="form-error"></p>
+          <button type="submit" class="btn btn-primary btn-full auth-gate-btn">
+            Sign in
+          </button>
+        </form>
+      </div>
+    </div>
 
-      <!-- List of shifts pulled from Google Calendar, each with its signups -->
+    <!-- ── Main admin content — shown after authentication ── -->
+    <main id="admin-main" class="container" hidden>
+      <div class="admin-topbar">
+        <div>
+          <h1 class="page-title">Admin — Signups</h1>
+          <p class="page-sub">
+            Visits are managed in
+            <strong>Google Calendar</strong> — add, edit, or cancel events there and
+            they appear here within a minute. Signups are saved to
+            <strong>Google Sheets</strong>.
+          </p>
+        </div>
+        <button id="logout-btn" class="btn btn-secondary admin-logout">Sign out</button>
+      </div>
+
       <section>
         <div id="admin-shifts"></div>
         <p id="admin-status" class="status"></p>

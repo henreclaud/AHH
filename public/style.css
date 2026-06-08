@@ -494,6 +494,63 @@ input:focus {
   transition: border-color 0.15s;
 }
 
+/* ---- Admin auth gate ---- */
+.auth-gate-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 71px);
+  padding: 32px 20px;
+}
+.auth-gate {
+  width: 100%;
+  max-width: 380px;
+  padding: 36px 32px;
+  text-align: center;
+}
+.auth-gate-icon {
+  font-size: 2.2rem;
+  margin-bottom: 12px;
+}
+.auth-gate-title {
+  margin: 0 0 6px;
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+.auth-gate-sub {
+  margin: 0 0 22px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.auth-gate-form {
+  text-align: left;
+}
+.auth-gate-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.auth-gate-btn {
+  margin-top: 18px;
+  border-radius: 12px;
+}
+
+/* Admin topbar: title/sub on the left, sign-out button on the right */
+.admin-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.admin-logout {
+  flex-shrink: 0;
+  margin-top: 28px;
+  font-size: 0.88rem;
+  padding: 8px 16px;
+}
+
 /* ---- Admin page ---- */
 .page-title {
   margin: 28px 0 6px;

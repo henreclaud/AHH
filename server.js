@@ -5,6 +5,7 @@
 
 const express = require('express');
 const path    = require('path');
+const crypto  = require('crypto');
 
 // Load .env file when running locally.
 // On Render the real environment variables are set in the dashboard.
@@ -23,6 +24,38 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ── Admin auth ────────────────────────────────────────────────────────────────
+// Simple single-password auth. Valid tokens are kept in memory; they expire
+// when the server restarts (meaning a re-login is needed after a deploy).
+
+const adminTokens = new Set();
+
+function requireAdmin(req, res, next) {
+  const header = req.headers['authorization'] || '';
+  const token  = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (token && adminTokens.has(token)) return next();
+  res.status(401).json({ error: 'Unauthorized' });
+}
+
+// POST /api/admin/login
+// Body: { password }. Returns { token } on success.
+app.post('/api/admin/login', (req, res) => {
+  const supplied = (req.body.password || '').trim();
+  const expected = process.env.ADMIN_PASSWORD || '';
+
+  if (!expected) {
+    console.warn('[auth] ADMIN_PASSWORD is not set — admin login is disabled.');
+    return res.status(503).json({ error: 'Admin access is not configured.' });
+  }
+  if (!supplied || supplied !== expected) {
+    return res.status(401).json({ error: 'Incorrect password. Try again.' });
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  adminTokens.add(token);
+  res.json({ token });
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -91,9 +124,9 @@ app.post('/api/signups/cancel', async (req, res) => {
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
-// GET /api/admin/shifts
+// GET /api/admin/shifts  (requires admin auth)
 // Returns all shifts with their full signup lists (name + email per person).
-app.get('/api/admin/shifts', async (req, res) => {
+app.get('/api/admin/shifts', requireAdmin, async (req, res) => {
   try {
     res.json(await getAdminShifts());
   } catch (err) {
