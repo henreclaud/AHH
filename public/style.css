@@ -1093,18 +1093,12 @@ input:focus {
   box-shadow: 0 1px 4px rgba(95, 89, 156, 0.3);
 }
 
-/* Wrapper that holds type chips + openings toggle in one flowing row */
-.chip-row-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  flex: 1;
-  align-items: center;
-}
-
-/* Type chips row — no longer needs flex:1 since the wrapper handles growth */
+/* Type chips row — scrolls if overflow on narrow screens */
 .chip-row {
-  display: contents; /* chips flow directly into chip-row-wrap */
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  flex: 1;
 }
 .chip {
   display: inline-flex;

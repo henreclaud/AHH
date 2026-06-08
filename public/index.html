@@ -47,13 +47,12 @@
           <button class="seg" data-range="week">This week</button>
           <button class="seg" data-range="month">This month</button>
         </div>
-        <!-- All chips flow together in one wrapping group -->
-        <div class="chip-row-wrap">
-          <div class="chip-row" id="filter-type" role="group" aria-label="Filter by activity type"></div>
-          <button class="chip" id="filter-openings" aria-pressed="false">
-            Opportunities with Openings
-          </button>
-        </div>
+        <!-- Activity-type chips are injected here by app.js -->
+        <div class="chip-row" id="filter-type" role="group" aria-label="Filter by activity type"></div>
+        <!-- Openings toggle -->
+        <button class="chip openings-toggle" id="filter-openings" aria-pressed="false">
+          Opportunities with Openings
+        </button>
       </div>
     </div>
 
