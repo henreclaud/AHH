@@ -20,8 +20,7 @@ const staffMain = document.getElementById('staff-main');
 const loginForm = document.getElementById('login-form');
 const loginError = document.getElementById('login-error');
 
-const TOKEN_KEY = 'aah_staff_token';
-let sessionToken = sessionStorage.getItem(TOKEN_KEY) || '';
+let sessionToken = ''; // page-lifetime only — cleared when you navigate away
 
 function showGate(msg) {
   authGate.hidden  = false;
@@ -74,9 +73,8 @@ loginForm.addEventListener('submit', async e => {
       return;
     }
 
-    // Success — store token in sessionStorage so refresh doesn't re-prompt.
+    // Success — store token in page-lifetime variable.
     sessionToken = data.token;
-    sessionStorage.setItem(TOKEN_KEY, sessionToken);
 
     submitBtn.textContent = '✓ Signed in!';
     loginError.style.color = 'var(--purple)';
@@ -100,14 +98,8 @@ loginForm.addEventListener('submit', async e => {
   }
 });
 
-// On load: if we have a stored token try loading shifts directly.
-// If the server rejects it (restart/redeploy cleared tokens), show the gate.
-if (sessionToken) {
-  showStaff();
-  // loadShifts() is called after DOM elements below are declared — see bottom of file.
-} else {
-  showGate();
-}
+// Always show the gate on every page load — no persistence.
+showGate();
 
 // ── Page elements ────────────────────────────────────────────────────────────
 const shiftsContainer = document.getElementById('shifts');
@@ -138,8 +130,6 @@ async function loadShifts() {
       headers: { 'Authorization': `Bearer ${sessionToken}` },
     });
     if (res.status === 401) {
-      // Token was cleared by a server restart — clear storage and re-prompt.
-      sessionStorage.removeItem(TOKEN_KEY);
       sessionToken = '';
       showGate('Session expired — please sign in again.');
       return;
@@ -420,7 +410,4 @@ function escapeHtml(t) {
   const el = document.createElement('div'); el.textContent = t ?? ''; return el.innerHTML;
 }
 
-// loadShifts() is called either:
-//   • here, if a stored sessionStorage token was found on page load, OR
-//   • by the login form handler after a successful fresh login.
-if (sessionToken) loadShifts();
+// loadShifts() is called by the login form handler after a successful login.
