@@ -20,22 +20,6 @@
       </div>
     </header>
 
-    <section class="masthead">
-      <div class="container masthead-inner">
-        <div class="masthead-copy">
-          <h1 class="masthead-title">Staff view</h1>
-          <p class="masthead-sub">
-            All upcoming visits with full details — including staff-only notes.
-            Volunteer-facing descriptions are shown as volunteers will see them.
-          </p>
-        </div>
-        <div class="masthead-stat" id="open-stat">
-          <span class="stat-number" id="stat-number">—</span>
-          <span class="stat-label">visits open</span>
-        </div>
-      </div>
-    </section>
-
     <!-- ── Password gate — shown until authenticated ── -->
     <div id="auth-gate" class="auth-gate-wrap">
       <div class="auth-gate card">
@@ -63,63 +47,79 @@
     <!-- Staff content — hidden until authenticated -->
     <div id="staff-main" hidden>
 
-    <div class="filter-bar" id="filter-bar">
-      <div class="container filter-bar-inner">
-        <div class="seg-group" id="filter-date" role="group" aria-label="Filter by date">
-          <button class="seg active" data-range="all">All dates</button>
-          <button class="seg" data-range="today">Today</button>
-          <button class="seg" data-range="week">This week</button>
-          <button class="seg" data-range="month">This month</button>
+      <section class="masthead">
+        <div class="container masthead-inner">
+          <div class="masthead-copy">
+            <h1 class="masthead-title">Staff view</h1>
+            <p class="masthead-sub">
+              All upcoming visits with full details — including staff-only notes.
+              Volunteer-facing descriptions are shown as volunteers will see them.
+            </p>
+          </div>
+          <div class="masthead-stat" id="open-stat">
+            <span class="stat-number" id="stat-number">—</span>
+            <span class="stat-label">visits open</span>
+          </div>
         </div>
-        <div class="chip-row" id="filter-type" role="group" aria-label="Filter by activity type">
-          <button class="chip openings-toggle" id="filter-openings" aria-pressed="false">
-            Opportunities with Openings
-          </button>
+      </section>
+
+      <div class="filter-bar" id="filter-bar">
+        <div class="container filter-bar-inner">
+          <div class="seg-group" id="filter-date" role="group" aria-label="Filter by date">
+            <button class="seg active" data-range="all">All dates</button>
+            <button class="seg" data-range="today">Today</button>
+            <button class="seg" data-range="week">This week</button>
+            <button class="seg" data-range="month">This month</button>
+          </div>
+          <div class="chip-row" id="filter-type" role="group" aria-label="Filter by activity type">
+            <button class="chip openings-toggle" id="filter-openings" aria-pressed="false">
+              Opportunities with Openings
+            </button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <main class="container">
-      <div class="results-bar">
-        <p class="results-count" id="results-count"></p>
-        <button class="clear-btn" id="clear-filters" hidden>Clear filters</button>
-      </div>
-
-      <div id="shifts" class="shift-grid-compact"></div>
-      <p id="status" class="status"></p>
-    </main>
-
-    <footer class="site-footer">
-      <div class="container">
-        Made with love for the animals and the people they visit.
-        · <a class="cancel-link" href="cancel.html">Cancel a signup</a>
-      </div>
-    </footer>
-
-    <dialog id="signup-dialog">
-      <form id="signup-form">
-        <h2 id="dialog-title">Sign up</h2>
-        <p class="dialog-sub">Pop your details in and you're on the team.</p>
-        <label>
-          Full name (first and last)
-          <input type="text" id="name" name="name" autocomplete="name"
-                 placeholder="Jane Smith" required />
-        </label>
-        <label>
-          Your email
-          <input type="email" id="email" name="email" autocomplete="email" required />
-        </label>
-        <p id="form-error" class="form-error"></p>
-        <div class="dialog-buttons">
-          <button type="button" id="cancel-button" class="btn btn-secondary">Cancel</button>
-          <button type="submit" class="btn btn-primary">Count me in</button>
+      <main class="container">
+        <div class="results-bar">
+          <p class="results-count" id="results-count"></p>
+          <button class="clear-btn" id="clear-filters" hidden>Clear filters</button>
         </div>
-      </form>
-    </dialog>
+
+        <div id="shifts" class="shift-grid-compact"></div>
+        <p id="status" class="status"></p>
+      </main>
+
+      <footer class="site-footer">
+        <div class="container">
+          Made with love for the animals and the people they visit.
+          · <a class="cancel-link" href="cancel.html">Cancel a signup</a>
+        </div>
+      </footer>
+
+      <dialog id="signup-dialog">
+        <form id="signup-form">
+          <h2 id="dialog-title">Sign up</h2>
+          <p class="dialog-sub">Pop your details in and you're on the team.</p>
+          <label>
+            Full name (first and last)
+            <input type="text" id="name" name="name" autocomplete="name"
+                   placeholder="Jane Smith" required />
+          </label>
+          <label>
+            Your email
+            <input type="email" id="email" name="email" autocomplete="email" required />
+          </label>
+          <p id="form-error" class="form-error"></p>
+          <div class="dialog-buttons">
+            <button type="button" id="cancel-button" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Count me in</button>
+          </div>
+        </form>
+      </dialog>
 
     </div> <!-- /staff-main -->
 
     <script src="sanitize.js"></script>
-    <script src="staff.js?v=3"></script>
+    <script src="staff.js?v=4"></script>
   </body>
 </html>
