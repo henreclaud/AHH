@@ -63,24 +63,53 @@ function getAuth() {
 //   Text shown to staff only.
 //
 // Headers are matched case-insensitively; extra whitespace is ignored.
-// If neither header is present, the whole description is treated as
-// volunteer-facing text (shown on both pages).
+// Descriptions may be plain text or HTML (Google Calendar rich text).
+//
+// Return values:
+//   volunteers — null if no FOR VOLUNTEERS header exists; otherwise the HTML/text
+//                content under that header (shown on volunteer + staff pages)
+//   staff      — null if no FOR STAFF header exists; otherwise content under that
+//                header (shown on staff page only)
+//
+// No-headers case: volunteers = null (shown to nobody on volunteer page),
+//                  staff = raw description (staff page shows everything).
 
 function parseDescription(raw) {
-  if (!raw || !raw.trim()) return { volunteers: '', staff: '' };
+  if (!raw || !raw.trim()) return { volunteers: null, staff: null };
 
-  // Normalise line endings.
-  const lines = raw.replace(/\r\n/g, '\n').split('\n');
+  // Split into "logical lines" by converting all common block-level breaks
+  // (plain \n, HTML <br>, </p>, <p>) to a null-byte marker, then splitting.
+  // This preserves inline HTML (links, bold, etc.) within each line.
+  const MARKER = '\x00';
+  const marked = raw
+    .replace(/\r\n/g, '\n')
+    .replace(/\n/g, MARKER)
+    .replace(/<br\s*\/?>/gi, MARKER)
+    .replace(/<\/p\s*>/gi,   MARKER)
+    .replace(/<p[^>]*>/gi,   MARKER);
 
-  const isVolHeader   = l => /^for\s+volunteers\s*$/i.test(l.trim());
-  const isStaffHeader = l => /^for\s+staff\s*$/i.test(l.trim());
+  const rawLines = marked.split(MARKER);
 
-  const volIdx   = lines.findIndex(isVolHeader);
-  const staffIdx = lines.findIndex(isStaffHeader);
+  // Strip all tags + decode basic entities to get visible text per line,
+  // used only for header detection.
+  const textLines = rawLines.map(l =>
+    l.replace(/<[^>]+>/g, '')
+     .replace(/&nbsp;/g, ' ')
+     .replace(/&amp;/g,  '&')
+     .replace(/&lt;/g,   '<')
+     .replace(/&gt;/g,   '>')
+     .trim()
+  );
 
-  // No headers — treat whole description as volunteer-facing.
+  const isVol   = l => /^for\s+volunteers\s*$/i.test(l);
+  const isStaff = l => /^for\s+staff\s*$/i.test(l);
+
+  const volIdx   = textLines.findIndex(isVol);
+  const staffIdx = textLines.findIndex(isStaff);
+
+  // No section headers at all — volunteer page shows nothing, staff sees everything.
   if (volIdx === -1 && staffIdx === -1) {
-    return { volunteers: raw.trim(), staff: '' };
+    return { volunteers: null, staff: raw.trim() };
   }
 
   // Build an ordered list of section starts.
@@ -89,11 +118,17 @@ function parseDescription(raw) {
   if (staffIdx !== -1) sections.push({ type: 'staff',      idx: staffIdx });
   sections.sort((a, b) => a.idx - b.idx);
 
-  const result = { volunteers: '', staff: '' };
+  // Extract HTML content between each header and the next (or end of description).
+  // Re-join with <br> so line breaks render correctly in the browser.
+  const result = { volunteers: null, staff: null };
   for (let i = 0; i < sections.length; i++) {
     const start = sections[i].idx + 1;
-    const end   = sections[i + 1] ? sections[i + 1].idx : lines.length;
-    result[sections[i].type] = lines.slice(start, end).join('\n').trim();
+    const end   = sections[i + 1] ? sections[i + 1].idx : rawLines.length;
+    const html  = rawLines.slice(start, end)
+      .join('<br>')
+      .replace(/^(<br>\s*)+|(\s*<br>)+$/g, '') // trim leading/trailing <br>
+      .trim();
+    result[sections[i].type] = html || null;
   }
   return result;
 }

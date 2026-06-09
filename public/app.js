@@ -151,11 +151,11 @@ function createCard(shift) {
     card.appendChild(loc);
   }
 
-  // Volunteer-facing description
+  // Volunteer-facing description (null = no FOR VOLUNTEERS header → show nothing)
   if (shift.description_volunteers) {
-    const desc = document.createElement('p');
+    const desc = document.createElement('div');
     desc.className = 'scard-desc';
-    desc.textContent = shift.description_volunteers;
+    desc.innerHTML = sanitizeHtml(shift.description_volunteers);
     card.appendChild(desc);
   }
 

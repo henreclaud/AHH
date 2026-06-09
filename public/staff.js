@@ -151,9 +151,9 @@ function createCard(shift) {
 
   // Volunteer-facing description (shown exactly as volunteers see it)
   if (shift.description_volunteers) {
-    const desc = document.createElement('p');
+    const desc = document.createElement('div');
     desc.className = 'scard-desc';
-    desc.textContent = shift.description_volunteers;
+    desc.innerHTML = sanitizeHtml(shift.description_volunteers);
     card.appendChild(desc);
   }
 
@@ -167,9 +167,9 @@ function createCard(shift) {
     badge.textContent = 'Staff only';
     staffBlock.appendChild(badge);
 
-    const staffText = document.createElement('p');
+    const staffText = document.createElement('div');
     staffText.className = 'scard-desc-text';
-    staffText.textContent = shift.description_staff;
+    staffText.innerHTML = sanitizeHtml(shift.description_staff);
     staffBlock.appendChild(staffText);
 
     card.appendChild(staffBlock);
