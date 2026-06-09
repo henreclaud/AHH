@@ -13,6 +13,7 @@ require('dotenv').config();
 
 const {
   getShifts,
+  getStaffShifts,
   getAdminShifts,
   createSignup,
   cancelSignupById,
@@ -125,6 +126,18 @@ app.post('/api/signups/cancel', async (req, res) => {
 });
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
+
+// GET /api/staff/shifts
+// Returns all shifts with both description sections visible.
+// Open for now — password protection will be added as a separate step.
+app.get('/api/staff/shifts', async (req, res) => {
+  try {
+    res.json(await getStaffShifts());
+  } catch (err) {
+    console.error('[GET /api/staff/shifts]', err.message);
+    res.status(500).json({ error: 'Could not load shifts. Please try again.' });
+  }
+});
 
 // GET /api/admin/shifts  (requires admin auth)
 // Returns all shifts with their full signup lists (name + email per person).

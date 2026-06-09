@@ -1,13 +1,14 @@
-// app.js — volunteer page (index.html).
-// Loads shifts once, lets volunteers filter by date range and activity type,
-// and handles signing up through the popup dialog.
+// staff.js — staff view page (staff.html).
+// Identical to app.js except:
+//   • Loads from /api/staff/shifts (includes staff-only description text)
+//   • Cards show both the volunteer-facing description AND the staff-only section
 
 if (location.protocol === 'file:') {
   document.body.innerHTML =
     '<div class="setup-notice">' +
     '<h2>Almost there!</h2>' +
     '<p>Run <code>npm start</code> in your terminal, then open ' +
-    '<code>http://localhost:3000</code> in your browser.</p>' +
+    '<code>http://localhost:3000/staff.html</code> in your browser.</p>' +
     '</div>';
   throw new Error('Opened via file:// — server not running.');
 }
@@ -37,7 +38,7 @@ async function loadShifts() {
   statusEl.textContent = 'Loading…';
   shiftsContainer.innerHTML = '';
   try {
-    const res = await fetch('/api/shifts');
+    const res = await fetch('/api/staff/shifts');
     allShifts = await res.json();
     statNumber.textContent = allShifts.filter(s => !s.is_full).length;
     buildTypeChips();
@@ -54,7 +55,6 @@ function getVisible() {
 
   return allShifts
     .filter(s => {
-      // Date range
       if (filters.dateRange !== 'all') {
         const d = parseDate(s.date);
         if (!d) return false;
@@ -65,13 +65,11 @@ function getVisible() {
               d.getMonth()    !== today.getMonth()) return false;
         }
       }
-      // Activity type
       if (filters.type !== 'all' && (s.category || 'Visit') !== filters.type) return false;
-      // Openings only — shifts with no limit always pass; limited shifts must have spots left
       if (filters.openingsOnly && s.has_limit && s.is_full) return false;
       return true;
     })
-    .sort(compareDateTime); // always soonest first
+    .sort(compareDateTime);
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────
@@ -151,12 +149,30 @@ function createCard(shift) {
     card.appendChild(loc);
   }
 
-  // Volunteer-facing description
+  // Volunteer-facing description (shown exactly as volunteers see it)
   if (shift.description_volunteers) {
     const desc = document.createElement('p');
     desc.className = 'scard-desc';
     desc.textContent = shift.description_volunteers;
     card.appendChild(desc);
+  }
+
+  // Staff-only description
+  if (shift.description_staff) {
+    const staffBlock = document.createElement('div');
+    staffBlock.className = 'scard-desc scard-desc-staff';
+
+    const badge = document.createElement('span');
+    badge.className = 'staff-badge';
+    badge.textContent = 'Staff only';
+    staffBlock.appendChild(badge);
+
+    const staffText = document.createElement('p');
+    staffText.className = 'scard-desc-text';
+    staffText.textContent = shift.description_staff;
+    staffBlock.appendChild(staffText);
+
+    card.appendChild(staffBlock);
   }
 
   // Sign-up button
@@ -175,7 +191,6 @@ function createCard(shift) {
 }
 
 // ── Type chips ───────────────────────────────────────────────────────────────
-// Only these five types appear as filter chips on the main page.
 const MAIN_FILTER_TYPES = [
   'Farm Chores',
   'Open Hours',
@@ -191,18 +206,12 @@ function buildTypeChips() {
     counts.set(t, (counts.get(t) || 0) + 1);
   });
 
-  // Rescue the openings toggle before wiping the row — we'll re-append it at the end.
   const openingsBtn = typeRow.querySelector('#filter-openings');
   typeRow.innerHTML = '';
-
-  // "All types" chip always first.
   typeRow.appendChild(makeChip('all', 'All types', allShifts.length));
-  // Only show the five approved filter types (in the defined order), skip missing ones.
   MAIN_FILTER_TYPES.forEach(t => {
     if (counts.has(t)) typeRow.appendChild(makeChip(t, t, counts.get(t)));
   });
-
-  // Openings toggle flows at the end of the chip row.
   if (openingsBtn) typeRow.appendChild(openingsBtn);
 }
 
@@ -265,7 +274,6 @@ signupForm.addEventListener('submit', async e => {
   const name  = document.getElementById('name').value.trim();
   const email = document.getElementById('email').value.trim();
 
-  // Require at least two words (first + last name).
   if (!/\S+\s+\S+/.test(name)) {
     formError.textContent = 'Please enter your first and last name.';
     return;

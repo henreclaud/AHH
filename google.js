@@ -52,6 +52,52 @@ function getAuth() {
   return _auth;
 }
 
+// ── Description parser ────────────────────────────────────────────────────────
+//
+// Calendar event descriptions may contain ALL-CAPS section headers:
+//
+//   FOR VOLUNTEERS
+//   Text that shows for volunteers and staff.
+//
+//   FOR STAFF
+//   Text shown to staff only.
+//
+// Headers are matched case-insensitively; extra whitespace is ignored.
+// If neither header is present, the whole description is treated as
+// volunteer-facing text (shown on both pages).
+
+function parseDescription(raw) {
+  if (!raw || !raw.trim()) return { volunteers: '', staff: '' };
+
+  // Normalise line endings.
+  const lines = raw.replace(/\r\n/g, '\n').split('\n');
+
+  const isVolHeader   = l => /^for\s+volunteers\s*$/i.test(l.trim());
+  const isStaffHeader = l => /^for\s+staff\s*$/i.test(l.trim());
+
+  const volIdx   = lines.findIndex(isVolHeader);
+  const staffIdx = lines.findIndex(isStaffHeader);
+
+  // No headers — treat whole description as volunteer-facing.
+  if (volIdx === -1 && staffIdx === -1) {
+    return { volunteers: raw.trim(), staff: '' };
+  }
+
+  // Build an ordered list of section starts.
+  const sections = [];
+  if (volIdx   !== -1) sections.push({ type: 'volunteers', idx: volIdx });
+  if (staffIdx !== -1) sections.push({ type: 'staff',      idx: staffIdx });
+  sections.sort((a, b) => a.idx - b.idx);
+
+  const result = { volunteers: '', staff: '' };
+  for (let i = 0; i < sections.length; i++) {
+    const start = sections[i].idx + 1;
+    const end   = sections[i + 1] ? sections[i + 1].idx : lines.length;
+    result[sections[i].type] = lines.slice(start, end).join('\n').trim();
+  }
+  return result;
+}
+
 // ── Calendar helpers ──────────────────────────────────────────────────────────
 
 const PT = 'America/Los_Angeles'; // AAH operates in Pacific Time
@@ -174,6 +220,8 @@ async function refreshCalendarCache() {
     const endDt   = new Date(event.end.dateTime   || event.end.date);
 
     const { category, icon } = deriveCategory(name);
+    const { volunteers: description_volunteers, staff: description_staff } =
+      parseDescription(desc);
 
     shifts.push({
       id:         event.id,        // Google Calendar event ID — stable, unique
@@ -186,6 +234,8 @@ async function refreshCalendarCache() {
       end_time:   toHHMM(endDt),
       capacity:  has_limit ? capacity : 999999, // unlimited events never fill up
       has_limit,
+      description_volunteers, // shown on volunteer + staff pages
+      description_staff,      // shown on staff page only
     });
   }
 
@@ -304,21 +354,31 @@ async function getAllSignups() {
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
-// Returns all upcoming shifts with live spots_left and is_full.
-async function getShifts() {
-  const [shifts, signups] = await Promise.all([getCachedShifts(), getAllSignups()]);
-
-  // Count signups per shift ID in one pass.
-  const counts = {};
-  for (const s of signups) {
-    counts[s.shift_id] = (counts[s.shift_id] || 0) + 1;
-  }
-
+// Shared helper — adds live spot counts to a list of cached shifts.
+async function _withCounts(shifts) {
+  const signups = await getAllSignups();
+  const counts  = {};
+  for (const s of signups) counts[s.shift_id] = (counts[s.shift_id] || 0) + 1;
   return shifts.map(shift => {
     const taken      = counts[shift.id] || 0;
     const spots_left = Math.max(0, shift.capacity - taken);
     return { ...shift, taken, spots_left, is_full: spots_left <= 0 };
   });
+}
+
+// Returns all upcoming shifts for the public volunteer page.
+// description_staff is intentionally omitted — it is staff-only information.
+async function getShifts() {
+  const shifts = await getCachedShifts();
+  const result = await _withCounts(shifts);
+  return result.map(({ description_staff, ...pub }) => pub); // strip staff text
+}
+
+// Returns all upcoming shifts for the staff page, including both description
+// sections so coordinators can see what volunteers will read and what's staff-only.
+async function getStaffShifts() {
+  const shifts = await getCachedShifts();
+  return _withCounts(shifts);
 }
 
 // Returns a single shift (with live counts) by calendar event ID.
@@ -488,4 +548,4 @@ async function cancelSignupById(signupId) {
   return { ok: true, message: 'Your signup has been cancelled.' };
 }
 
-module.exports = { getShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, ensureHeaders };
+module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, ensureHeaders };
