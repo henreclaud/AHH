@@ -416,7 +416,9 @@ async function _withCounts(shifts) {
 async function getShifts() {
   const shifts = await getCachedShifts();
   const result = await _withCounts(shifts);
-  return result.map(({ description_staff, ...pub }) => pub); // strip staff text
+  return result
+    .filter(s => !/^dnd\b/i.test(s.title || '')) // hide DND-prefixed events from volunteers
+    .map(({ description_staff, ...pub }) => pub); // strip staff text
 }
 
 // Returns all upcoming shifts for the staff page, including both description
