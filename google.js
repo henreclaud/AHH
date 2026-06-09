@@ -153,8 +153,9 @@ function toDateStr(date) {
 }
 
 // Patterns that indicate a volunteer limit — checked in title AND description.
-// Matches: "Limit 5", "Limit: 5", "Limit 5 volunteers", "5 spots", "5 volunteer spots"
-const LIMIT_RE = /(?:limit:?\s*(\d+)(?:\s+volunteers?)?|(\d+)\s+(?:volunteer\s+)?spots?)/i;
+// Matches: "Limit 5", "Limit: 5", "Limit 5 volunteers", "5 spots", "5 volunteer spots",
+//          "25 Volunteers", "(25 Volunteers)"
+const LIMIT_RE = /(?:limit:?\s*(\d+)(?:\s+volunteers?)?|(\d+)\s+(?:volunteer\s+)?spots?|\(?\s*(\d+)\s+volunteers?\s*\)?)/i;
 
 // Extract volunteer capacity from a string (title or description).
 // Returns an integer, or null if no pattern found.
@@ -162,14 +163,22 @@ function parseCapacity(text) {
   if (!text) return null;
   const m = text.match(LIMIT_RE);
   if (!m) return null;
-  return parseInt(m[1] || m[2], 10);
+  return parseInt(m[1] || m[2] || m[3], 10);
 }
 
 // Extract the shift name from the event title.
-// Strips the limit phrase and any trailing dashes / punctuation.
+// Strips the limit phrase and any trailing/leading dashes / punctuation.
+// Handles:
+//   "Rabbit Workshop (25 Volunteers)"  → "Rabbit Workshop"
+//   "25 Volunteers - Barnyard Buddy Day" → "Barnyard Buddy Day"
+//   "Barnyard Visit - Limit 10"        → "Barnyard Visit"
 function parseShiftName(title) {
-  // Remove the limit phrase (and everything after it on the same segment).
   const stripped = title
+    // Strip "(N Volunteers)" parenthetical anywhere in the title
+    .replace(/\s*\(\s*\d+\s+volunteers?\s*\)/gi, '')
+    // Strip "N Volunteers - " or "N Volunteers – " at the start of the title
+    .replace(/^\s*\d+\s+volunteers?\s*[-–—]\s*/i, '')
+    // Strip old-style limit phrases (and everything after on the same segment)
     .replace(/\s*[-–—]?\s*(?:limit:?\s*\d+(?:\s+volunteers?)?|\d+\s+(?:volunteer\s+)?spots?).*/i, '')
     .trim()
     .replace(/[-–—\s]+$/, '') // remove trailing dashes / spaces
