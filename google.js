@@ -315,6 +315,7 @@ setInterval(async () => {
 
 const SHEET_TAB     = 'signups';
 const SHEET_RANGE   = `${SHEET_TAB}!A:I`;
+const PWD_TAB       = 'pwd';
 const SHEET_HEADERS = [
   'Timestamp', 'Volunteer Name', 'Email',
   'Shift ID', 'Shift Name', 'Shift Date', 'Shift Time',
@@ -592,4 +593,47 @@ async function cancelSignupById(signupId) {
   return { ok: true, message: 'Your signup has been cancelled.' };
 }
 
-module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, ensureHeaders };
+// ── Password helpers ──────────────────────────────────────────────────────────
+//
+// Reads the "pwd" tab on the Google Sheet.
+// Expected layout (order of rows does not matter; a header row is fine):
+//
+//   A        B
+//   admin    <admin password>
+//   staff    <staff password>
+//
+// Results are cached for 5 minutes so a password change takes effect quickly
+// without hammering the Sheets API on every login attempt.
+
+let _pwdCache      = null;
+let _pwdExpiresAt  = 0;
+const PWD_CACHE_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getPasswords() {
+  if (_pwdCache && Date.now() < _pwdExpiresAt) return _pwdCache;
+
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range:         `${PWD_TAB}!A:B`,
+  });
+
+  const rows   = res.data.values || [];
+  const result = { admin: null, staff: null };
+
+  for (const row of rows) {
+    const label = (row[0] || '').trim().toLowerCase();
+    const pwd   = (row[1] || '').trim();
+    if (label === 'admin' && pwd) result.admin = pwd;
+    if (label === 'staff' && pwd) result.staff = pwd;
+  }
+
+  _pwdCache     = result;
+  _pwdExpiresAt = Date.now() + PWD_CACHE_MS;
+  console.log('[passwords] loaded from sheet');
+  return result;
+}
+
+module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, ensureHeaders, getPasswords };

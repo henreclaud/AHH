@@ -18,6 +18,7 @@ const {
   createSignup,
   cancelSignupById,
   ensureHeaders,
+  getPasswords,
 } = require('./google');
 
 const app  = express();
@@ -26,38 +27,62 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ── Admin auth ────────────────────────────────────────────────────────────────
-// Simple single-password auth. Valid tokens are kept in memory; they expire
-// when the server restarts (meaning a re-login is needed after a deploy).
+// ── Auth ──────────────────────────────────────────────────────────────────────
+// Token-based auth for Admin and Staff pages.
+// Tokens are random 32-byte hex strings kept in memory; they expire on server
+// restart (deploy), requiring a re-login.  Passwords are read from the "pwd"
+// tab on the Google Sheet so Peter can update them without a code change.
 
 const adminTokens = new Set();
+const staffTokens = new Set();
 
-function requireAdmin(req, res, next) {
-  const header = req.headers['authorization'] || '';
-  const token  = header.startsWith('Bearer ') ? header.slice(7) : '';
-  if (token && adminTokens.has(token)) return next();
-  res.status(401).json({ error: 'Unauthorized' });
+function makeRequireRole(tokenSet) {
+  return function (req, res, next) {
+    const header = req.headers['authorization'] || '';
+    const token  = header.startsWith('Bearer ') ? header.slice(7) : '';
+    if (token && tokenSet.has(token)) return next();
+    res.status(401).json({ error: 'Unauthorized' });
+  };
 }
+const requireAdmin = makeRequireRole(adminTokens);
+const requireStaff = makeRequireRole(staffTokens);
 
-// POST /api/admin/login
-// Body: { password }. Returns { token } on success.
-app.post('/api/admin/login', (req, res) => {
-  const supplied = (req.body.password || '').trim();
-  const expected = (process.env.ADMIN_PASSWORD || '').trim();
-
-  if (!expected) {
-    console.warn('[auth] ADMIN_PASSWORD is not set — admin login is disabled.');
-    return res.status(503).json({ error: 'Admin access is not configured. Set ADMIN_PASSWORD on Render.' });
+// Shared login helper — looks up the password for `role` in the sheet and
+// issues a token if it matches.
+async function handleLogin(role, tokenSet, supplied, res) {
+  if (!supplied) {
+    return res.status(400).json({ error: 'Password is required.' });
   }
-  if (!supplied || supplied !== expected) {
-    console.log(`[auth] Failed login attempt (supplied length: ${supplied.length}, expected length: ${expected.length})`);
+  let passwords;
+  try {
+    passwords = await getPasswords();
+  } catch (err) {
+    console.error(`[auth] Could not read passwords from sheet:`, err.message);
+    return res.status(503).json({ error: 'Could not verify password — please try again.' });
+  }
+  const expected = passwords[role];
+  if (!expected) {
+    console.warn(`[auth] No ${role} password set in the pwd tab.`);
+    return res.status(503).json({ error: `${role.charAt(0).toUpperCase() + role.slice(1)} access is not configured. Add the password to the pwd tab on the sheet.` });
+  }
+  if (supplied !== expected) {
+    console.log(`[auth] Failed ${role} login`);
     return res.status(401).json({ error: 'Incorrect password. Try again.' });
   }
-
   const token = crypto.randomBytes(32).toString('hex');
-  adminTokens.add(token);
-  console.log('[auth] Admin login successful');
+  tokenSet.add(token);
+  console.log(`[auth] ${role} login successful`);
   res.json({ token });
+}
+
+// POST /api/admin/login — body: { password }
+app.post('/api/admin/login', async (req, res) => {
+  await handleLogin('admin', adminTokens, (req.body.password || '').trim(), res);
+});
+
+// POST /api/staff/login — body: { password }
+app.post('/api/staff/login', async (req, res) => {
+  await handleLogin('staff', staffTokens, (req.body.password || '').trim(), res);
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -127,10 +152,9 @@ app.post('/api/signups/cancel', async (req, res) => {
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
-// GET /api/staff/shifts
+// GET /api/staff/shifts  (requires staff auth)
 // Returns all shifts with both description sections visible.
-// Open for now — password protection will be added as a separate step.
-app.get('/api/staff/shifts', async (req, res) => {
+app.get('/api/staff/shifts', requireStaff, async (req, res) => {
   try {
     res.json(await getStaffShifts());
   } catch (err) {

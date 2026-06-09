@@ -36,6 +36,33 @@
       </div>
     </section>
 
+    <!-- ── Password gate — shown until authenticated ── -->
+    <div id="auth-gate" class="auth-gate-wrap">
+      <div class="auth-gate card">
+        <div class="auth-gate-icon">🔒</div>
+        <h2 class="auth-gate-title">Staff access</h2>
+        <p class="auth-gate-sub">Enter the staff password to continue.</p>
+        <form id="login-form" class="auth-gate-form" novalidate>
+          <label class="auth-gate-label" for="staff-password">Password</label>
+          <input
+            type="password"
+            id="staff-password"
+            name="staff-password"
+            class="auth-gate-input"
+            autocomplete="current-password"
+            required
+          />
+          <p id="login-error" class="form-error"></p>
+          <button type="submit" class="btn btn-primary btn-full auth-gate-btn">
+            Sign in
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Staff content — hidden until authenticated -->
+    <div id="staff-main" hidden>
+
     <div class="filter-bar" id="filter-bar">
       <div class="container filter-bar-inner">
         <div class="seg-group" id="filter-date" role="group" aria-label="Filter by date">
@@ -90,7 +117,9 @@
       </form>
     </dialog>
 
+    </div> <!-- /staff-main -->
+
     <script src="sanitize.js"></script>
-    <script src="staff.js?v=2"></script>
+    <script src="staff.js?v=3"></script>
   </body>
 </html>

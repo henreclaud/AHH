@@ -1,5 +1,6 @@
 // staff.js — staff view page (staff.html).
 // Identical to app.js except:
+//   • Password-gated: requires staff login (token stored in sessionStorage)
 //   • Loads from /api/staff/shifts (includes staff-only description text)
 //   • Cards show both the volunteer-facing description AND the staff-only section
 
@@ -11,6 +12,101 @@ if (location.protocol === 'file:') {
     '<code>http://localhost:3000/staff.html</code> in your browser.</p>' +
     '</div>';
   throw new Error('Opened via file:// — server not running.');
+}
+
+// ── Auth gate ─────────────────────────────────────────────────────────────────
+const authGate  = document.getElementById('auth-gate');
+const staffMain = document.getElementById('staff-main');
+const loginForm = document.getElementById('login-form');
+const loginError = document.getElementById('login-error');
+
+const TOKEN_KEY = 'aah_staff_token';
+let sessionToken = sessionStorage.getItem(TOKEN_KEY) || '';
+
+function showGate(msg) {
+  authGate.hidden  = false;
+  staffMain.hidden = true;
+  if (msg) {
+    loginError.style.color = '';
+    loginError.textContent = msg;
+  }
+}
+
+function showStaff() {
+  authGate.hidden  = true;
+  staffMain.hidden = false;
+}
+
+loginForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const submitBtn = loginForm.querySelector('[type=submit]');
+  const password  = document.getElementById('staff-password').value;
+  loginError.textContent = '';
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Signing in…';
+
+  // Show "waking up" message if the server takes more than 6s (Render cold start).
+  const wakeMsg = setTimeout(() => {
+    if (submitBtn.disabled) {
+      loginError.textContent = 'Server is waking up — this takes up to a minute on the free plan. Almost there…';
+    }
+  }, 6000);
+
+  // 70-second timeout to survive Render free-tier cold starts.
+  const controller = new AbortController();
+  const timeout    = setTimeout(() => controller.abort(), 70000);
+
+  try {
+    const res  = await fetch('/api/staff/login', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ password }),
+      signal:  controller.signal,
+    });
+    const data = await res.json();
+    clearTimeout(wakeMsg);
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign in';
+      showGate(data.error || 'Something went wrong. Try again.');
+      return;
+    }
+
+    // Success — store token in sessionStorage so refresh doesn't re-prompt.
+    sessionToken = data.token;
+    sessionStorage.setItem(TOKEN_KEY, sessionToken);
+
+    submitBtn.textContent = '✓ Signed in!';
+    loginError.style.color = 'var(--purple)';
+    loginError.textContent = '↓ Scroll down to see shifts';
+
+    setTimeout(() => {
+      showStaff();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      loadShifts();
+    }, 600);
+  } catch (err) {
+    clearTimeout(wakeMsg);
+    clearTimeout(timeout);
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Sign in';
+    if (err.name === 'AbortError') {
+      showGate('Request timed out — server may still be waking up. Please try again.');
+    } else {
+      showGate('Could not connect. Please try again.');
+    }
+  }
+});
+
+// On load: if we have a stored token try loading shifts directly.
+// If the server rejects it (restart/redeploy cleared tokens), show the gate.
+if (sessionToken) {
+  showStaff();
+  // loadShifts() is called after DOM elements below are declared — see bottom of file.
+} else {
+  showGate();
 }
 
 // ── Page elements ────────────────────────────────────────────────────────────
@@ -38,7 +134,16 @@ async function loadShifts() {
   statusEl.textContent = 'Loading…';
   shiftsContainer.innerHTML = '';
   try {
-    const res = await fetch('/api/staff/shifts');
+    const res = await fetch('/api/staff/shifts', {
+      headers: { 'Authorization': `Bearer ${sessionToken}` },
+    });
+    if (res.status === 401) {
+      // Token was cleared by a server restart — clear storage and re-prompt.
+      sessionStorage.removeItem(TOKEN_KEY);
+      sessionToken = '';
+      showGate('Session expired — please sign in again.');
+      return;
+    }
     allShifts = await res.json();
     statNumber.textContent = allShifts.filter(s => !s.is_full).length;
     buildTypeChips();
@@ -315,4 +420,7 @@ function escapeHtml(t) {
   const el = document.createElement('div'); el.textContent = t ?? ''; return el.innerHTML;
 }
 
-loadShifts();
+// loadShifts() is called either:
+//   • here, if a stored sessionStorage token was found on page load, OR
+//   • by the login form handler after a successful fresh login.
+if (sessionToken) loadShifts();
