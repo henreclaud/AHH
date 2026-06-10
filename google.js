@@ -417,7 +417,7 @@ async function getShifts() {
   const shifts = await getCachedShifts();
   const result = await _withCounts(shifts);
   return result
-    .filter(s => !/^dnd\b/i.test(s.title || '')) // hide DND-prefixed events from volunteers
+    .filter(s => !/^hide\b/i.test(s.title || '')) // hide HIDE-prefixed events from volunteers
     .map(({ description_staff, ...pub }) => pub); // strip staff text
 }
 
