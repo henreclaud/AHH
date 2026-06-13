@@ -271,10 +271,13 @@ function createCard(shift) {
     list.className = 'scard-signups-list';
     shift.signups.forEach(({ name, email, registered }) => {
       const li = document.createElement('li');
-      const warning = registered === 'No'
-        ? ' <span class="signup-unregistered" title="This email is not in the registered volunteers list">⚠️ Not a registered volunteer</span>'
-        : '';
-      li.innerHTML = `<span class="signup-name">${escapeHtml(name)}</span> <a class="signup-email" href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>${warning}`;
+      li.innerHTML = `
+        <div class="signup-row">
+          <span class="signup-name">${escapeHtml(name)}</span>
+          <a class="signup-email" href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>
+        </div>
+        ${registered === 'No' ? '<div class="signup-unregistered">⚠️ Not a registered volunteer</div>' : ''}
+      `;
       list.appendChild(li);
     });
     signupSection.appendChild(list);
