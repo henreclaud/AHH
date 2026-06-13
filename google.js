@@ -314,13 +314,15 @@ setInterval(async () => {
 //   G  Shift Time
 
 const SHEET_TAB     = 'signups';
-const SHEET_RANGE   = `${SHEET_TAB}!A:I`;
+const SHEET_RANGE   = `${SHEET_TAB}!A:J`;  // J = Registered
 const PWD_TAB       = 'pwd';
+const REG_TAB       = 'registered volunteers';
 const SHEET_HEADERS = [
   'Timestamp', 'Volunteer Name', 'Email',
   'Shift ID', 'Shift Name', 'Shift Date', 'Shift Time',
   // col H (7) = Signup ID
   // col I (8) = Reminded (managed by send-reminders.js)
+  // col J (9) = Registered (Yes/No — blank for rows created before this feature)
 ];
 
 // Generates a unique 6-character cancellation code (no 0/O/1/I to avoid confusion).
@@ -331,8 +333,8 @@ function generateSignupId() {
   return id;
 }
 
-// Writes the header row if the sheet is empty, and ensures the Signup ID header
-// exists in column H.  Safe to call every startup.
+// Writes the header row if the sheet is empty, and ensures column headers for
+// Signup ID (H) and Registered (J) exist.  Safe to call every startup.
 async function ensureHeaders() {
   if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
 
@@ -340,7 +342,7 @@ async function ensureHeaders() {
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${SHEET_TAB}!A1:I1`,
+    range: `${SHEET_TAB}!A1:J1`,
   });
 
   const existing = (res.data.values || [])[0] || [];
@@ -365,6 +367,17 @@ async function ensureHeaders() {
       requestBody: { values: [['Signup ID']] },
     });
     console.log('[sheets] "Signup ID" header added to column H');
+  }
+
+  // Ensure Registered header in column J (index 9).
+  if ((existing[9] || '').trim() !== 'Registered') {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_TAB}!J1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [['Registered']] },
+    });
+    console.log('[sheets] "Registered" header added to column J');
   }
 }
 
@@ -394,6 +407,7 @@ async function getAllSignups() {
       shift_time: r[6] || '',
       signup_id:  r[7] || '',  // col H
       // r[8] = Reminded (col I) — managed by send-reminders.js
+      registered: r[9] || '',  // col J — 'Yes', 'No', or '' for old rows
     }));
 }
 
@@ -441,7 +455,7 @@ async function getAdminShifts() {
   // Group signup rows by shift_id.
   const byShift = {};
   for (const s of signups) {
-    (byShift[s.shift_id] = byShift[s.shift_id] || []).push({ name: s.name, email: s.email });
+    (byShift[s.shift_id] = byShift[s.shift_id] || []).push({ name: s.name, email: s.email, registered: s.registered });
   }
 
   return shifts.map(shift => {
@@ -449,6 +463,53 @@ async function getAdminShifts() {
     const spots_left   = Math.max(0, shift.capacity - shiftSignups.length);
     return { ...shift, spots_left, is_full: spots_left <= 0, signups: shiftSignups };
   });
+}
+
+// ── Registered volunteers cache ───────────────────────────────────────────────
+//
+// The "registered volunteers" tab holds a sorted list of approved email addresses.
+// We cache it for 5 minutes to avoid hitting the Sheets API on every signup.
+// Binary search is used for O(log n) lookup — important for thousands of entries.
+
+let _regCache      = null;   // sorted lowercase email array
+let _regExpiresAt  = 0;
+const REG_CACHE_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getRegisteredEmails() {
+  if (_regCache && Date.now() < _regExpiresAt) return _regCache;
+
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range:         `${REG_TAB}!A:A`,
+  });
+
+  // Normalise to lowercase, drop blanks/headers.
+  const emails = (res.data.values || [])
+    .map(r => (r[0] || '').trim().toLowerCase())
+    .filter(e => e && e.includes('@'));
+
+  _regCache     = emails; // assume already sorted; if not, sort defensively
+  _regCache.sort();
+  _regExpiresAt = Date.now() + REG_CACHE_MS;
+  console.log(`[registered] loaded ${emails.length} emails from sheet`);
+  return _regCache;
+}
+
+// Binary search — returns true if email (lowercased) is in the sorted array.
+function binarySearchEmail(sortedEmails, email) {
+  const target = email.toLowerCase();
+  let lo = 0, hi = sortedEmails.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    const cmp = sortedEmails[mid].localeCompare(target);
+    if (cmp === 0) return true;
+    if (cmp < 0)   lo = mid + 1;
+    else            hi = mid - 1;
+  }
+  return false;
 }
 
 // Validates and records a volunteer signup.
@@ -484,6 +545,16 @@ async function createSignup(shiftId, name, email) {
   let signupId;
   do { signupId = generateSignupId(); } while (allIds.has(signupId));
 
+  // Check if this email is in the registered volunteers list.
+  // Failures are non-fatal — we still save the signup, just can't flag it.
+  let registeredFlag = '';
+  try {
+    const regEmails = await getRegisteredEmails();
+    registeredFlag  = binarySearchEmail(regEmails, email) ? 'Yes' : 'No';
+  } catch (err) {
+    console.warn('[registered] could not check registration:', err.message);
+  }
+
   // Append a new row to the Google Sheet.
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
 
@@ -500,8 +571,9 @@ async function createSignup(shiftId, name, email) {
         shift.title,
         shift.date,
         `${shift.start_time}–${shift.end_time}`,
-        signupId,    // col H — Signup ID
-        // col I — Reminded (managed by send-reminders.js)
+        signupId,       // col H — Signup ID
+        '',             // col I — Reminded (managed by send-reminders.js)
+        registeredFlag, // col J — Registered: 'Yes', 'No', or '' if lookup failed
       ]],
     },
   });

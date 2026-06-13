@@ -1424,6 +1424,13 @@ input:focus {
   padding: 5px 10px;
 }
 
+.signup-unregistered {
+  font-size: 0.75rem;
+  color: #b45309;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 /* Header links row (staff page has two header links) */
 .header-links {
   display: flex;
