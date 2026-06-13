@@ -313,8 +313,11 @@ setInterval(async () => {
 //   F  Shift Date
 //   G  Shift Time
 
-const SHEET_TAB     = 'signups';
-const SHEET_RANGE   = `${SHEET_TAB}!A:J`;  // J = Registered
+const SHEET_TAB          = 'signups';
+const SHEET_RANGE        = `${SHEET_TAB}!A:J`;  // used for reads (A–J)
+const SHEET_APPEND_RANGE = `${SHEET_TAB}!A1`;   // used for appends — anchors at A1 so
+                                                 // Google Sheets always appends starting
+                                                 // at column A, not a sparse later column
 const PWD_TAB       = 'pwd';
 const REG_TAB       = 'registered volunteers';
 const SHEET_HEADERS = [
@@ -560,7 +563,7 @@ async function createSignup(shiftId, name, email) {
 
   await sheets.spreadsheets.values.append({
     spreadsheetId:   SHEET_ID,
-    range:           SHEET_RANGE,
+    range:           SHEET_APPEND_RANGE,
     valueInputOption: 'USER_ENTERED',
     requestBody: {
       values: [[
