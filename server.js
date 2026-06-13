@@ -153,10 +153,10 @@ app.post('/api/signups/cancel', async (req, res) => {
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
 // GET /api/staff/shifts  (requires staff auth)
-// Returns all shifts with both description sections visible.
+// Returns all shifts with both description sections AND the full signup list per shift.
 app.get('/api/staff/shifts', requireStaff, async (req, res) => {
   try {
-    res.json(await getStaffShifts());
+    res.json(await getAdminShifts());
   } catch (err) {
     console.error('[GET /api/staff/shifts]', err.message);
     res.status(500).json({ error: 'Could not load shifts. Please try again.' });

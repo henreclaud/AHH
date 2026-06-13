@@ -252,6 +252,43 @@ function createCard(shift) {
     card.appendChild(desc);
   }
 
+  // ── Signup list ───────────────────────────────────────────────────────────
+  const signupSection = document.createElement('div');
+  signupSection.className = 'scard-signups';
+
+  const signupHeading = document.createElement('p');
+  signupHeading.className = 'scard-signups-heading';
+  signupHeading.textContent = `Signups (${(shift.signups || []).length})`;
+  signupSection.appendChild(signupHeading);
+
+  if (!shift.signups || shift.signups.length === 0) {
+    const none = document.createElement('p');
+    none.className = 'scard-signups-empty';
+    none.textContent = 'No signups yet.';
+    signupSection.appendChild(none);
+  } else {
+    const list = document.createElement('ul');
+    list.className = 'scard-signups-list';
+    shift.signups.forEach(({ name, email }) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="signup-name">${escapeHtml(name)}</span> <a class="signup-email" href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>`;
+      list.appendChild(li);
+    });
+    signupSection.appendChild(list);
+
+    // "Notify volunteers" mailto button
+    const emails  = shift.signups.map(s => s.email).join(',');
+    const subject = `Update regarding your signup: ${shift.title} on ${formatDate(shift.date)}`;
+    const mailto  = `mailto:${emails}?subject=${encodeURIComponent(subject)}`;
+    const notify  = document.createElement('a');
+    notify.className = 'btn btn-secondary scard-notify-btn';
+    notify.href      = mailto;
+    notify.textContent = 'Notify volunteers of a change';
+    signupSection.appendChild(notify);
+  }
+
+  card.appendChild(signupSection);
+
   // Staff-only description
   if (shift.description_staff) {
     const staffBlock = document.createElement('div');

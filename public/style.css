@@ -1369,6 +1369,61 @@ input:focus {
   white-space: pre-wrap;
 }
 
+/* ── Staff page: signup list ─────────────────────────────────────────────── */
+.scard-signups {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f4f4f8;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+.scard-signups-heading {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.scard-signups-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.scard-signups-list {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scard-signups-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: baseline;
+}
+
+.signup-name {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.signup-email {
+  color: var(--purple);
+  font-size: 0.78rem;
+}
+
+.scard-notify-btn {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  padding: 5px 10px;
+}
+
 /* Header links row (staff page has two header links) */
 .header-links {
   display: flex;
