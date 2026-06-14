@@ -460,8 +460,8 @@ async function getAllSignups() {
       // r[8] = Reminded (col I) — managed by send-reminders.js
       registered:    r[9]  || '',  // col J
       attendance:    r[10] || '',  // col K — 'Attended', 'No-show', or ''
-      checkin_time:  r[11] || '',  // col L — ISO timestamp of check-in
-      checkout_time: r[12] || '',  // col M — ISO timestamp of check-out
+      checkin_time:  r[11] ? (formatPacific(new Date(r[11])) || r[11]) : '',  // col L
+      checkout_time: r[12] ? (formatPacific(new Date(r[12])) || r[12]) : '',  // col M
       hours_logged:  r[13] || '',  // col N — decimal hours
     }));
 }
@@ -832,7 +832,7 @@ async function markCheckIn(signupId) {
       valueInputOption: 'RAW',
       data: [
         { range: `${SHEET_TAB}!K${row}`, values: [['Attended']] },
-        { range: `${SHEET_TAB}!L${row}`, values: [[formatPacific(now)]] },
+        { range: `${SHEET_TAB}!L${row}`, values: [[now.toISOString()]] },
       ],
     },
   });
@@ -865,13 +865,13 @@ async function markCheckOut(signupId) {
     requestBody: {
       valueInputOption: 'RAW',
       data: [
-        { range: `${SHEET_TAB}!M${row}`, values: [[formatPacific(now)]] },
+        { range: `${SHEET_TAB}!M${row}`, values: [[now.toISOString()]] },
         { range: `${SHEET_TAB}!N${row}`, values: [[hours]] },
       ],
     },
   });
 
-  return { ok: true, checkout_time: formatPacific(now), hours };
+  return { ok: true, checkout_time: formatPacific(now), hours: hours ? parseFloat(hours) : null };
 }
 
 // Scans all signups for a given date and writes 'No-show' to any row where
