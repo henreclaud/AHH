@@ -692,14 +692,46 @@ function todayPacific() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
 }
 
-// Looks up signups for a given email that fall on today's date (Pacific time).
-// Used by the check-in page.
+// Parses a time string like "9:00am" or "3:30pm" → minutes since midnight.
+function timeToMinutes(str) {
+  const m = (str || '').trim().toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?([ap]m)$/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2] || '0', 10);
+  if (m[3] === 'pm' && h !== 12) h += 12;
+  if (m[3] === 'am' && h === 12) h = 0;
+  return h * 60 + min;
+}
+
+// Returns true if the current Pacific time falls within the check-in window
+// for a shift whose time string looks like "9:00am–11:00am".
+// Window: 30 minutes before start through 30 minutes after end.
+const CHECKIN_BUFFER_MINS = 30;
+
+function isCheckinWindowOpen(shiftTimeStr) {
+  const [startStr, endStr] = (shiftTimeStr || '').split('–');
+  const startMins = timeToMinutes(startStr);
+  const endMins   = timeToMinutes(endStr);
+  if (startMins === null || endMins === null) return true; // can't parse → allow
+
+  // Current time in Pacific, as minutes since midnight.
+  const now        = new Date();
+  const pacificNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  const nowMins    = pacificNow.getHours() * 60 + pacificNow.getMinutes();
+
+  return nowMins >= startMins - CHECKIN_BUFFER_MINS &&
+         nowMins <= endMins   + CHECKIN_BUFFER_MINS;
+}
+
+// Looks up signups for a given email on today's date (Pacific time) that are
+// within the check-in window (30 min before start → 30 min after end).
 async function getTodaySignupsForEmail(email) {
   const today   = todayPacific();
   const signups = await getAllSignups();
   return signups.filter(s =>
     s.email.toLowerCase() === email.toLowerCase().trim() &&
-    s.shift_date === today
+    s.shift_date === today &&
+    isCheckinWindowOpen(s.shift_time)
   );
 }
 
