@@ -6,6 +6,7 @@
 const express = require('express');
 const path    = require('path');
 const crypto  = require('crypto');
+const cron    = require('node-cron');
 
 // Load .env file when running locally.
 // On Render the real environment variables are set in the dashboard.
@@ -19,6 +20,9 @@ const {
   cancelSignupById,
   ensureHeaders,
   getPasswords,
+  getTodaySignupsForEmail,
+  markAttendance,
+  markNoShows,
 } = require('./google');
 
 const app  = express();
@@ -173,6 +177,68 @@ app.get('/api/admin/shifts', requireAdmin, async (req, res) => {
     res.status(500).json({ error: 'Could not load admin data. Please try again.' });
   }
 });
+
+// ── Check-in API ──────────────────────────────────────────────────────────────
+
+// GET /api/checkin?email=...
+// Returns today's signups for the given email (for the check-in page).
+app.get('/api/checkin', async (req, res) => {
+  const email = (req.query.email || '').trim();
+  if (!email) return res.status(400).json({ error: 'Email is required.' });
+  try {
+    const signups = await getTodaySignupsForEmail(email);
+    res.json(signups);
+  } catch (err) {
+    console.error('[GET /api/checkin]', err.message);
+    res.status(500).json({ error: 'Could not look up signups. Please try again.' });
+  }
+});
+
+// POST /api/checkin  body: { signupId }
+// Marks a signup as Attended.
+app.post('/api/checkin', async (req, res) => {
+  const signupId = (req.body.signupId || '').trim().toUpperCase();
+  if (!signupId) return res.status(400).json({ error: 'signupId is required.' });
+  try {
+    const result = await markAttendance(signupId, 'Attended');
+    if (!result.ok) return res.status(404).json({ error: result.error });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[POST /api/checkin]', err.message);
+    res.status(500).json({ error: 'Could not record check-in. Please try again.' });
+  }
+});
+
+// ── No-show cron ──────────────────────────────────────────────────────────────
+
+// POST /api/cron/mark-noshows
+// Marks all unfilled attendance rows for today (or a given date) as No-show.
+// Protected by CRON_SECRET env var.  Also called internally by node-cron.
+app.post('/api/cron/mark-noshows', async (req, res) => {
+  const secret   = (process.env.CRON_SECRET || '').trim();
+  const supplied = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim();
+  if (secret && supplied !== secret) {
+    return res.status(401).json({ error: 'Unauthorized.' });
+  }
+  try {
+    const result = await markNoShows(req.body.date || undefined);
+    res.json(result);
+  } catch (err) {
+    console.error('[POST /api/cron/mark-noshows]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Schedule no-show flagging at 11:59pm Pacific every night.
+cron.schedule('59 23 * * *', async () => {
+  console.log('[cron] running nightly no-show check');
+  try {
+    const result = await markNoShows();
+    console.log(`[cron] no-show check done: ${result.marked} marked for ${result.date}`);
+  } catch (err) {
+    console.error('[cron] no-show check failed:', err.message);
+  }
+}, { timezone: 'America/Los_Angeles' });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 

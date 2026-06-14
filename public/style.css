@@ -1431,6 +1431,103 @@ input:focus {
   padding-left: 2px;
 }
 
+/* Attendance badges on staff page */
+.att-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.att-attended { background: #dcfce7; color: #166534; }
+.att-noshow   { background: #fee2e2; color: #991b1b; }
+.att-upcoming { background: #f1f5f9; color: #64748b; }
+
+/* ── Check-in page ────────────────────────────────────────────────────────── */
+.checkin-page {
+  max-width: 480px;
+  margin: 40px auto;
+  padding: 0 16px;
+}
+
+.checkin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+}
+
+.checkin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.checkin-shift-card {
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.checkin-shift-name {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--ink);
+  margin: 0;
+}
+
+.checkin-shift-time {
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.checkin-already {
+  font-size: 0.88rem;
+  color: #166534;
+  font-weight: 500;
+  margin: 0;
+}
+
+.checkin-confirm-btn {
+  margin-top: 6px;
+}
+
+.checkin-success {
+  text-align: center;
+  padding: 40px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkin-success-icon { font-size: 3rem; }
+.checkin-success-title { font-size: 1.4rem; font-weight: 700; color: var(--ink); margin: 0; }
+.checkin-success-sub  { color: var(--muted); margin: 0; }
+
+.checkin-none {
+  text-align: center;
+  padding: 40px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkin-none-icon { font-size: 2.5rem; }
+.checkin-none-text { font-weight: 600; color: var(--ink); margin: 0; }
+.checkin-none-sub  { color: var(--muted); margin: 0; font-size: 0.9rem; }
+
+.checkin-back {
+  margin-top: 16px;
+  width: 100%;
+}
+
 .scard-notify-btn {
   margin-top: 4px;
   font-size: 0.78rem;

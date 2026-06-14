@@ -314,10 +314,13 @@ setInterval(async () => {
 //   G  Shift Time
 
 const SHEET_TAB          = 'signups';
-const SHEET_RANGE        = `${SHEET_TAB}!A:J`;  // used for reads (A–J)
+const SHEET_RANGE        = `${SHEET_TAB}!A:K`;  // used for reads (A–K)
 const SHEET_APPEND_RANGE = `${SHEET_TAB}!A1`;   // used for appends — anchors at A1 so
                                                  // Google Sheets always appends starting
                                                  // at column A, not a sparse later column
+// Column layout:
+//   A Timestamp  B Name  C Email  D Shift ID  E Shift Name  F Shift Date  G Shift Time
+//   H Signup ID  I Reminded  J Registered  K Attendance
 const PWD_TAB       = 'pwd';
 const REG_TAB       = 'registered volunteers';
 const SHEET_HEADERS = [
@@ -345,7 +348,7 @@ async function ensureHeaders() {
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${SHEET_TAB}!A1:J1`,
+    range: `${SHEET_TAB}!A1:K1`,
   });
 
   const existing = (res.data.values || [])[0] || [];
@@ -382,6 +385,17 @@ async function ensureHeaders() {
     });
     console.log('[sheets] "Registered" header added to column J');
   }
+
+  // Ensure Attendance header in column K (index 10).
+  if ((existing[10] || '').trim() !== 'Attendance') {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_TAB}!K1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [['Attendance']] },
+    });
+    console.log('[sheets] "Attendance" header added to column K');
+  }
 }
 
 // Reads every signup row from the sheet and returns plain objects.
@@ -410,7 +424,8 @@ async function getAllSignups() {
       shift_time: r[6] || '',
       signup_id:  r[7] || '',  // col H
       // r[8] = Reminded (col I) — managed by send-reminders.js
-      registered: r[9] || '',  // col J — 'Yes', 'No', or '' for old rows
+      registered:  r[9]  || '',  // col J — 'Yes', 'No', or '' for old rows
+      attendance:  r[10] || '',  // col K — 'Attended', 'No-show', or ''
     }));
 }
 
@@ -458,7 +473,7 @@ async function getAdminShifts() {
   // Group signup rows by shift_id.
   const byShift = {};
   for (const s of signups) {
-    (byShift[s.shift_id] = byShift[s.shift_id] || []).push({ name: s.name, email: s.email, registered: s.registered });
+    (byShift[s.shift_id] = byShift[s.shift_id] || []).push({ name: s.name, email: s.email, registered: s.registered, attendance: s.attendance, signup_id: s.signup_id });
   }
 
   return shifts.map(shift => {
@@ -670,6 +685,97 @@ async function cancelSignupById(signupId) {
   return { ok: true, message: 'Your signup has been cancelled.' };
 }
 
+// ── Attendance helpers ────────────────────────────────────────────────────────
+
+// Returns today's date string in YYYY-MM-DD format, Pacific time.
+function todayPacific() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+}
+
+// Looks up signups for a given email that fall on today's date (Pacific time).
+// Used by the check-in page.
+async function getTodaySignupsForEmail(email) {
+  const today   = todayPacific();
+  const signups = await getAllSignups();
+  return signups.filter(s =>
+    s.email.toLowerCase() === email.toLowerCase().trim() &&
+    s.shift_date === today
+  );
+}
+
+// Writes an attendance status ('Attended' | 'No-show') to column K for the row
+// identified by signup_id (column H).  Returns { ok, error? }.
+async function markAttendance(signupId, status) {
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range:         SHEET_RANGE,
+  });
+
+  const rows = res.data.values || [];
+  let targetRow = -1;
+
+  for (let i = 1; i < rows.length; i++) {
+    if ((rows[i][7] || '').trim().toUpperCase() === signupId.trim().toUpperCase()) {
+      targetRow = i + 1; // sheet rows are 1-indexed; row 1 is the header
+      break;
+    }
+  }
+
+  if (targetRow === -1) return { ok: false, error: 'Signup not found.' };
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId:   SHEET_ID,
+    range:           `${SHEET_TAB}!K${targetRow}`,
+    valueInputOption: 'RAW',
+    requestBody:     { values: [[status]] },
+  });
+
+  return { ok: true };
+}
+
+// Scans all signups for a given date and writes 'No-show' to any row where
+// attendance is still blank.  Defaults to today (Pacific time) if no date given.
+// Called nightly at 11:59pm Pacific via node-cron and also via HTTP endpoint.
+async function markNoShows(dateStr) {
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
+  const targetDate = dateStr || todayPacific();
+  const sheets     = google.sheets({ version: 'v4', auth: getAuth() });
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range:         SHEET_RANGE,
+  });
+
+  const rows    = res.data.values || [];
+  const updates = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row        = rows[i];
+    if (!row || !row[3]) continue;              // skip rows without a shift ID
+    const shiftDate  = (row[5]  || '').trim(); // col F
+    const attendance = (row[10] || '').trim(); // col K
+    if (shiftDate === targetDate && !attendance) {
+      updates.push({ range: `${SHEET_TAB}!K${i + 1}`, values: [['No-show']] });
+    }
+  }
+
+  if (updates.length === 0) {
+    console.log(`[no-show] no unfilled rows for ${targetDate}`);
+    return { marked: 0, date: targetDate };
+  }
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody:   { valueInputOption: 'RAW', data: updates },
+  });
+
+  console.log(`[no-show] marked ${updates.length} no-shows for ${targetDate}`);
+  return { marked: updates.length, date: targetDate };
+}
+
 // ── Password helpers ──────────────────────────────────────────────────────────
 //
 // Reads the "pwd" tab on the Google Sheet.
@@ -713,4 +819,4 @@ async function getPasswords() {
   return result;
 }
 
-module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, ensureHeaders, getPasswords };
+module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, ensureHeaders, getPasswords, getTodaySignupsForEmail, markAttendance, markNoShows };

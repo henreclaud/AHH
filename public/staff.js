@@ -269,12 +269,26 @@ function createCard(shift) {
   } else {
     const list = document.createElement('ul');
     list.className = 'scard-signups-list';
-    shift.signups.forEach(({ name, email, registered }) => {
+    // Determine whether this shift is in the future (for ⏳ badge).
+    const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local (Pacific) time
+
+    shift.signups.forEach(({ name, email, registered, attendance }) => {
       const li = document.createElement('li');
+
+      let attendanceBadge = '';
+      if (attendance === 'Attended') {
+        attendanceBadge = '<span class="att-badge att-attended">✅ Attended</span>';
+      } else if (attendance === 'No-show') {
+        attendanceBadge = '<span class="att-badge att-noshow">❌ No-show</span>';
+      } else if (shift.date >= todayStr) {
+        attendanceBadge = '<span class="att-badge att-upcoming">⏳ Upcoming</span>';
+      }
+
       li.innerHTML = `
         <div class="signup-row">
           <span class="signup-name">${escapeHtml(name)}</span>
           <a class="signup-email" href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>
+          ${attendanceBadge}
         </div>
         ${registered === 'No' ? '<div class="signup-unregistered">⚠️ Not a registered volunteer</div>' : ''}
       `;
