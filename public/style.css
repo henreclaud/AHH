@@ -494,6 +494,91 @@ input:focus {
   transition: border-color 0.15s;
 }
 
+/* ── Cancel page — signup cards ──────────────────────────────────────────── */
+.cancel-signup-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  margin-bottom: 12px;
+}
+
+.cancel-signup-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cancel-signup-name {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--ink);
+  margin: 0 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cancel-signup-when {
+  font-size: 0.875rem;
+  color: var(--ink-soft, #555);
+  margin: 0;
+}
+
+.cancel-signup-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ── Danger button ───────────────────────────────────────────────────────── */
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+  border: none;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+/* ── Confirmation dialog ─────────────────────────────────────────────────── */
+.cancel-confirm-dialog {
+  border: none;
+  border-radius: 16px;
+  padding: 0;
+  max-width: 400px;
+  width: calc(100% - 32px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+.cancel-confirm-dialog::backdrop {
+  background: rgba(0,0,0,0.45);
+}
+.cancel-confirm-inner {
+  padding: 28px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cancel-confirm-msg {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+  line-height: 1.4;
+}
+.cancel-confirm-warn {
+  font-size: 0.875rem;
+  color: #b45309;
+  margin: 0;
+}
+.cancel-confirm-btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.cancel-confirm-btns .btn {
+  flex: 1;
+}
+
 /* ---- Admin auth gate ---- */
 .auth-gate-wrap {
   display: flex;

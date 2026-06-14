@@ -13,42 +13,82 @@
           <img class="brand-logo" src="images/aah-heart.png" alt="Animal Assisted Happiness logo" />
           <span class="brand-text">Animal Assisted Happiness</span>
         </a>
-        <a class="link" href="index.html">Volunteer</a>
+        <div class="header-links">
+          <a class="link" href="index.html">Volunteer</a>
+        </div>
       </div>
     </header>
 
     <main class="container">
-      <div class="cancel-page">
-        <h1 class="page-title">Cancel my signup</h1>
-        <p class="page-sub">
-          Enter the cancellation code you received when you signed up.
-        </p>
+      <div class="checkin-page">
 
-        <form id="cancel-form" class="cancel-form card">
-          <label>
-            Cancellation code
-            <input
-              type="text"
-              id="cancel-code"
-              name="signupId"
-              autocomplete="off"
-              placeholder="e.g. A7K2M9"
-              maxlength="6"
-              style="text-transform: uppercase; letter-spacing: 0.1em;"
-              required
-            />
-          </label>
+        <!-- Step 1: Email entry -->
+        <div id="step-email">
+          <h1 class="page-title">Cancel a signup</h1>
+          <p class="page-sub">Enter your email address to see your upcoming shifts.</p>
 
-          <p id="cancel-error"   class="form-error"   hidden></p>
-          <p id="cancel-success" class="form-success" hidden></p>
+          <form id="email-form" class="checkin-form card" novalidate>
+            <label>
+              Your email
+              <input
+                type="email"
+                id="email-input"
+                name="email"
+                autocomplete="email"
+                placeholder="you@example.com"
+                required
+              />
+            </label>
+            <p id="email-error" class="form-error" hidden></p>
+            <button type="submit" class="btn btn-primary btn-full" id="email-submit">
+              Find my signups
+            </button>
+          </form>
+        </div>
 
-          <div class="dialog-buttons">
-            <a href="index.html" class="btn btn-secondary">Back</a>
-            <button type="submit" class="btn btn-primary" id="cancel-submit">Cancel my signup</button>
+        <!-- Step 2: Signup list -->
+        <div id="step-list" hidden>
+          <h1 class="page-title">Your upcoming shifts</h1>
+          <p class="page-sub">Tap "Cancel" on any shift you'd like to remove.</p>
+          <div id="signup-list"></div>
+          <p id="list-error" class="form-error" hidden></p>
+          <button class="btn btn-secondary checkin-back" onclick="goBack()">← Use a different email</button>
+        </div>
+
+        <!-- Step 3: None found -->
+        <div id="step-none" hidden>
+          <div class="checkin-none card">
+            <div class="checkin-none-icon">📭</div>
+            <p class="checkin-none-text">No upcoming signups found.</p>
+            <p class="checkin-none-sub">We couldn't find any upcoming signups for that email address. Double-check your email and try again.</p>
           </div>
-        </form>
+          <button class="btn btn-secondary checkin-back" onclick="goBack()">← Try a different email</button>
+        </div>
+
+        <!-- Step 4: Cancelled confirmation -->
+        <div id="step-done" hidden>
+          <div class="checkin-success card">
+            <div class="checkin-success-icon">✅</div>
+            <h2 class="checkin-success-title">Signup cancelled</h2>
+            <p id="done-msg" class="checkin-success-sub"></p>
+          </div>
+          <button class="btn btn-secondary checkin-back" onclick="goBack()">Cancel another signup</button>
+        </div>
+
       </div>
     </main>
+
+    <!-- Confirmation dialog -->
+    <dialog id="confirm-dialog" class="cancel-confirm-dialog">
+      <div class="cancel-confirm-inner card">
+        <p id="confirm-msg" class="cancel-confirm-msg"></p>
+        <p class="cancel-confirm-warn">This cannot be undone.</p>
+        <div class="cancel-confirm-btns">
+          <button id="confirm-no"  class="btn btn-secondary">No, go back</button>
+          <button id="confirm-yes" class="btn btn-danger">Yes, cancel it</button>
+        </div>
+      </div>
+    </dialog>
 
     <footer class="site-footer">
       <div class="container">
@@ -56,6 +96,6 @@
       </div>
     </footer>
 
-    <script src="cancel.js"></script>
+    <script src="cancel.js?v=2"></script>
   </body>
 </html>

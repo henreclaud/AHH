@@ -466,6 +466,26 @@ async function getAllSignups() {
     }));
 }
 
+// Returns all upcoming signups (today or future) for the given email address.
+// "Upcoming" = shift_date >= today in Pacific time AND not already attended.
+async function getUpcomingSignupsByEmail(email) {
+  const today   = todayPacific();
+  const signups = await getAllSignups();
+  const norm    = (email || '').trim().toLowerCase();
+  return signups
+    .filter(s =>
+      s.email.toLowerCase() === norm &&
+      s.shift_date >= today &&
+      s.attendance !== 'Attended'
+    )
+    .map(s => ({
+      signup_id:  s.signup_id,
+      shift_name: s.shift_name,
+      shift_date: s.shift_date,
+      shift_time: s.shift_time,
+    }));
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 // Shared helper — adds live spot counts to a list of cached shifts.
@@ -957,4 +977,4 @@ async function getPasswords() {
   return result;
 }
 
-module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, ensureHeaders, getPasswords, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows };
+module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows };

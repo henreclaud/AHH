@@ -281,10 +281,7 @@ signupForm.addEventListener('submit', async e => {
     if (!res.ok) { formError.textContent = data.error || 'Something went wrong.'; return; }
     dialog.close();
     await loadShifts();
-    const codeMsg = data.signupId
-      ? `\n\nYour cancellation code is: ${data.signupId}\nSave this in case you need to cancel.`
-      : '';
-    alert(data.message + codeMsg);
+    alert(data.message);
   } catch {
     formError.textContent = 'Sorry, something went wrong. Please try again.';
   }

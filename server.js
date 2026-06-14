@@ -18,6 +18,7 @@ const {
   getAdminShifts,
   createSignup,
   cancelSignupById,
+  getUpcomingSignupsByEmail,
   ensureHeaders,
   getPasswords,
   getTodaySignupsForPerson,
@@ -137,13 +138,28 @@ app.post('/api/shifts/:id/signup', async (req, res) => {
   }
 });
 
+// GET /api/signups?email=
+// Returns all upcoming signups for the given email (for the cancel page).
+app.get('/api/signups', async (req, res) => {
+  const email = (req.query.email || '').trim();
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+  try {
+    res.json(await getUpcomingSignupsByEmail(email));
+  } catch (err) {
+    console.error('[GET /api/signups]', err.message);
+    res.status(500).json({ error: 'Could not look up signups. Please try again.' });
+  }
+});
+
 // POST /api/signups/cancel
-// Cancels a signup. Body: { signupId }.
+// Cancels a signup by ID. Body: { signupId }.
 app.post('/api/signups/cancel', async (req, res) => {
   const signupId = (req.body.signupId || '').trim();
 
   if (!signupId) {
-    return res.status(400).json({ error: 'Please enter your cancellation code.' });
+    return res.status(400).json({ error: 'signupId is required.' });
   }
 
   try {
