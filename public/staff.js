@@ -272,7 +272,7 @@ function createCard(shift) {
     // Determine whether this shift is in the future (for ⏳ badge).
     const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local (Pacific) time
 
-    shift.signups.forEach(({ name, email, registered, attendance }) => {
+    shift.signups.forEach(({ name, email, registered, attendance, checkin_time, checkout_time, hours_logged }) => {
       const li = document.createElement('li');
 
       let attendanceBadge = '';
@@ -284,12 +284,21 @@ function createCard(shift) {
         attendanceBadge = '<span class="att-badge att-upcoming">⏳ Upcoming</span>';
       }
 
+      let hoursHtml = '';
+      if (checkin_time) {
+        hoursHtml += `<div class="signup-hours">🕐 In: ${escapeHtml(checkin_time)}`;
+        if (checkout_time) hoursHtml += ` &nbsp;·&nbsp; 🕑 Out: ${escapeHtml(checkout_time)}`;
+        if (hours_logged)  hoursHtml += ` &nbsp;·&nbsp; ⏱ ${escapeHtml(hours_logged)} hrs`;
+        hoursHtml += `</div>`;
+      }
+
       li.innerHTML = `
         <div class="signup-row">
           <span class="signup-name">${escapeHtml(name)}</span>
           <a class="signup-email" href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>
           ${attendanceBadge}
         </div>
+        ${hoursHtml}
         ${registered === 'No' ? '<div class="signup-unregistered">⚠️ Not a registered volunteer</div>' : ''}
       `;
       list.appendChild(li);

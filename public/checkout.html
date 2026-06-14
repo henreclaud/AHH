@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Check In · Animal Assisted Happiness</title>
+    <title>Check Out · Animal Assisted Happiness</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -19,10 +19,10 @@
     <main class="container">
       <div class="checkin-page">
 
-        <!-- Step 1: Email entry -->
+        <!-- Step 1: Name + email entry -->
         <div id="step-email">
-          <h1 class="page-title">Volunteer Check-In</h1>
-          <p class="page-sub">Enter your email address to check in for today's shift.</p>
+          <h1 class="page-title">Volunteer Check-Out</h1>
+          <p class="page-sub">Enter your name and email to log your hours for today's shift.</p>
 
           <form id="email-form" class="checkin-form card" novalidate>
             <label>
@@ -56,36 +56,36 @@
 
         <!-- Step 2: Shift selection -->
         <div id="step-shifts" hidden>
-          <h1 class="page-title">Your shift today</h1>
+          <h1 class="page-title">Check out of your shift</h1>
           <p id="shifts-sub" class="page-sub"></p>
           <div id="shift-list"></div>
           <p id="shifts-error" class="form-error" hidden></p>
-          <button class="btn btn-secondary checkin-back" onclick="goBack()">← Use a different email</button>
+          <button class="btn btn-secondary checkin-back" onclick="goBack()">← Use different info</button>
         </div>
 
         <!-- Step 3: Success -->
         <div id="step-success" hidden>
           <div class="checkin-success card">
-            <div class="checkin-success-icon">✅</div>
-            <h2 class="checkin-success-title">You're checked in!</h2>
+            <div class="checkin-success-icon">🎉</div>
+            <h2 class="checkin-success-title">Thanks for volunteering!</h2>
             <p id="success-msg" class="checkin-success-sub"></p>
           </div>
-          <button class="btn btn-secondary checkin-back" onclick="goBack()">Check in another volunteer</button>
+          <button class="btn btn-secondary checkin-back" onclick="goBack()">Check out another volunteer</button>
         </div>
 
-        <!-- No shifts today -->
+        <!-- No shifts eligible for checkout -->
         <div id="step-none" hidden>
           <div class="checkin-none card">
             <div class="checkin-none-icon">🕐</div>
-            <p class="checkin-none-text">No active shifts right now.</p>
-            <p class="checkin-none-sub">Check-in opens 30 minutes before your shift starts. If you don't have a shift today, please see a staff member.</p>
+            <p class="checkin-none-text">No shifts ready to check out.</p>
+            <p class="checkin-none-sub">You need to check in first, and your shift must be active or recently ended. If you think this is an error, please see a staff member.</p>
           </div>
-          <button class="btn btn-secondary checkin-back" onclick="goBack()">← Try a different email</button>
+          <button class="btn btn-secondary checkin-back" onclick="goBack()">← Try different info</button>
         </div>
 
       </div>
     </main>
 
-    <script src="checkin.js"></script>
+    <script src="checkout.js"></script>
   </body>
 </html>

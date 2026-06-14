@@ -1431,6 +1431,13 @@ input:focus {
   padding-left: 2px;
 }
 
+.signup-hours {
+  font-size: 0.75rem;
+  color: var(--ink-soft, #555);
+  padding-left: 2px;
+  margin-top: 2px;
+}
+
 /* Attendance badges on staff page */
 .att-badge {
   font-size: 0.72rem;

@@ -1,9 +1,9 @@
-// checkin.js — volunteer self-check-in page (checkin.html).
-// Step 1: enter email → Step 2: confirm shift → Step 3: success.
+// checkout.js — volunteer self-check-out page (checkout.html).
+// Step 1: enter name + email → Step 2: confirm shift → Step 3: success with hours.
 
-const stepEmail  = document.getElementById('step-email');
-const stepShifts = document.getElementById('step-shifts');
-const stepNone   = document.getElementById('step-none');
+const stepEmail   = document.getElementById('step-email');
+const stepShifts  = document.getElementById('step-shifts');
+const stepNone    = document.getElementById('step-none');
 const stepSuccess = document.getElementById('step-success');
 
 const emailForm   = document.getElementById('email-form');
@@ -23,13 +23,12 @@ function showStep(name) {
 }
 
 function goBack() {
-  emailInput.value = '';
   emailError.hidden = true;
   showStep('email');
-  emailInput.focus();
+  nameInput.focus();
 }
 
-// ── Step 1: look up email ─────────────────────────────────────────────────────
+// ── Step 1: look up name + email ──────────────────────────────────────────────
 
 emailForm.addEventListener('submit', async e => {
   e.preventDefault();
@@ -42,7 +41,7 @@ emailForm.addEventListener('submit', async e => {
   emailSubmit.textContent = 'Looking up…';
 
   try {
-    const res  = await fetch(`/api/checkin?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`);
+    const res  = await fetch(`/api/checkout?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`);
     const data = await res.json();
 
     if (!res.ok) {
@@ -56,10 +55,10 @@ emailForm.addEventListener('submit', async e => {
       return;
     }
 
-    buildShiftList(data, email);
+    buildShiftList(data);
     shiftsSub.textContent = data.length === 1
-      ? 'Please confirm you\'re here for this shift.'
-      : 'You have multiple shifts today — pick the one you\'re checking into.';
+      ? 'Tap the button to log your hours for this shift.'
+      : 'You have multiple active shifts — pick the one you are checking out of.';
     showStep('shifts');
 
   } catch {
@@ -73,7 +72,7 @@ emailForm.addEventListener('submit', async e => {
 
 // ── Step 2: shift list ────────────────────────────────────────────────────────
 
-function buildShiftList(signups, email) {
+function buildShiftList(signups) {
   shiftList.innerHTML = '';
   shiftsError.hidden  = true;
 
@@ -81,36 +80,31 @@ function buildShiftList(signups, email) {
     const card = document.createElement('div');
     card.className = 'checkin-shift-card card';
 
-    // Already checked in?
-    const alreadyIn = signup.attendance === 'Attended';
-
     card.innerHTML = `
       <p class="checkin-shift-name">${escapeHtml(signup.shift_name)}</p>
       <p class="checkin-shift-time">${escapeHtml(signup.shift_time)}</p>
-      ${alreadyIn ? '<p class="checkin-already">✅ Already checked in</p>' : ''}
+      ${signup.checkin_time ? `<p class="checkin-already">🕐 Checked in: ${escapeHtml(signup.checkin_time)}</p>` : ''}
     `;
 
-    if (!alreadyIn) {
-      const btn = document.createElement('button');
-      btn.className   = 'btn btn-primary btn-full checkin-confirm-btn';
-      btn.textContent = 'Yes, I\'m here for this shift';
-      btn.addEventListener('click', () => confirmCheckin(signup, btn));
-      card.appendChild(btn);
-    }
+    const btn = document.createElement('button');
+    btn.className   = 'btn btn-primary btn-full checkin-confirm-btn';
+    btn.textContent = 'Check out of this shift';
+    btn.addEventListener('click', () => confirmCheckout(signup, btn));
+    card.appendChild(btn);
 
     shiftList.appendChild(card);
   });
 }
 
-// ── Step 3: confirm check-in ──────────────────────────────────────────────────
+// ── Step 3: confirm check-out ─────────────────────────────────────────────────
 
-async function confirmCheckin(signup, btn) {
+async function confirmCheckout(signup, btn) {
   btn.disabled    = true;
-  btn.textContent = 'Checking in…';
+  btn.textContent = 'Checking out…';
   shiftsError.hidden = true;
 
   try {
-    const res  = await fetch('/api/checkin', {
+    const res  = await fetch('/api/checkout', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ signupId: signup.signup_id }),
@@ -121,18 +115,20 @@ async function confirmCheckin(signup, btn) {
       shiftsError.textContent = data.error || 'Something went wrong. Please try again.';
       shiftsError.hidden = false;
       btn.disabled    = false;
-      btn.textContent = 'Yes, I\'m here for this shift';
+      btn.textContent = 'Check out of this shift';
       return;
     }
 
-    successMsg.textContent = `Checked in for: ${signup.shift_name} · ${signup.shift_time}`;
+    const hoursText = data.hours != null ? ` You logged ${data.hours} hour${data.hours === 1 ? '' : 's'}.` : '';
+    successMsg.textContent =
+      `Checked out of: ${signup.shift_name} · ${signup.shift_time}.${hoursText}`;
     showStep('success');
 
   } catch {
     shiftsError.textContent = 'Could not connect. Please try again.';
     shiftsError.hidden = false;
     btn.disabled    = false;
-    btn.textContent = 'Yes, I\'m here for this shift';
+    btn.textContent = 'Check out of this shift';
   }
 }
 
@@ -146,4 +142,4 @@ function escapeHtml(t) {
 
 // Start on the email step.
 showStep('email');
-emailInput.focus();
+nameInput.focus();

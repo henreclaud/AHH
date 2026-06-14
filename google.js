@@ -314,13 +314,14 @@ setInterval(async () => {
 //   G  Shift Time
 
 const SHEET_TAB          = 'signups';
-const SHEET_RANGE        = `${SHEET_TAB}!A:K`;  // used for reads (A–K)
+const SHEET_RANGE        = `${SHEET_TAB}!A:N`;  // used for reads (A–N)
 const SHEET_APPEND_RANGE = `${SHEET_TAB}!A1`;   // used for appends — anchors at A1 so
                                                  // Google Sheets always appends starting
                                                  // at column A, not a sparse later column
 // Column layout:
 //   A Timestamp  B Name  C Email  D Shift ID  E Shift Name  F Shift Date  G Shift Time
 //   H Signup ID  I Reminded  J Registered  K Attendance
+//   L Check-in Time  M Check-out Time  N Hours Logged
 const PWD_TAB       = 'pwd';
 const REG_TAB       = 'registered volunteers';
 const SHEET_HEADERS = [
@@ -348,7 +349,7 @@ async function ensureHeaders() {
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${SHEET_TAB}!A1:K1`,
+    range: `${SHEET_TAB}!A1:N1`,
   });
 
   const existing = (res.data.values || [])[0] || [];
@@ -396,6 +397,39 @@ async function ensureHeaders() {
     });
     console.log('[sheets] "Attendance" header added to column K');
   }
+
+  // Ensure Check-in Time header in column L (index 11).
+  if ((existing[11] || '').trim() !== 'Check-in Time') {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_TAB}!L1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [['Check-in Time']] },
+    });
+    console.log('[sheets] "Check-in Time" header added to column L');
+  }
+
+  // Ensure Check-out Time header in column M (index 12).
+  if ((existing[12] || '').trim() !== 'Check-out Time') {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_TAB}!M1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [['Check-out Time']] },
+    });
+    console.log('[sheets] "Check-out Time" header added to column M');
+  }
+
+  // Ensure Hours Logged header in column N (index 13).
+  if ((existing[13] || '').trim() !== 'Hours Logged') {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_TAB}!N1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [['Hours Logged']] },
+    });
+    console.log('[sheets] "Hours Logged" header added to column N');
+  }
 }
 
 // Reads every signup row from the sheet and returns plain objects.
@@ -424,8 +458,11 @@ async function getAllSignups() {
       shift_time: r[6] || '',
       signup_id:  r[7] || '',  // col H
       // r[8] = Reminded (col I) — managed by send-reminders.js
-      registered:  r[9]  || '',  // col J — 'Yes', 'No', or '' for old rows
-      attendance:  r[10] || '',  // col K — 'Attended', 'No-show', or ''
+      registered:    r[9]  || '',  // col J
+      attendance:    r[10] || '',  // col K — 'Attended', 'No-show', or ''
+      checkin_time:  r[11] || '',  // col L — ISO timestamp of check-in
+      checkout_time: r[12] || '',  // col M — ISO timestamp of check-out
+      hours_logged:  r[13] || '',  // col N — decimal hours
     }));
 }
 
@@ -473,7 +510,11 @@ async function getAdminShifts() {
   // Group signup rows by shift_id.
   const byShift = {};
   for (const s of signups) {
-    (byShift[s.shift_id] = byShift[s.shift_id] || []).push({ name: s.name, email: s.email, registered: s.registered, attendance: s.attendance, signup_id: s.signup_id });
+    (byShift[s.shift_id] = byShift[s.shift_id] || []).push({
+      name: s.name, email: s.email, registered: s.registered,
+      attendance: s.attendance, signup_id: s.signup_id,
+      checkin_time: s.checkin_time, checkout_time: s.checkout_time, hours_logged: s.hours_logged,
+    });
   }
 
   return shifts.map(shift => {
@@ -723,49 +764,114 @@ function isCheckinWindowOpen(shiftTimeStr) {
          nowMins <= endMins   + CHECKIN_BUFFER_MINS;
 }
 
-// Looks up signups for a given email on today's date (Pacific time) that are
-// within the check-in window (30 min before start → 30 min after end).
-async function getTodaySignupsForEmail(email) {
+// Formats a Date as a readable Pacific time string for the sheet.
+// e.g. "Jun 13, 2026, 9:05 AM"
+function formatPacific(date) {
+  return date.toLocaleString('en-US', {
+    timeZone: 'America/Los_Angeles',
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
+// Looks up signups for a given email + name on today's date (Pacific time)
+// that are within the check-in window (30 min before start → 30 min after end).
+// Matching on BOTH email and name lets two people sharing an email be tracked separately.
+async function getTodaySignupsForPerson(email, name) {
   const today   = todayPacific();
   const signups = await getAllSignups();
   return signups.filter(s =>
     s.email.toLowerCase() === email.toLowerCase().trim() &&
+    s.name.toLowerCase()  === name.toLowerCase().trim()  &&
     s.shift_date === today &&
     isCheckinWindowOpen(s.shift_time)
   );
 }
 
-// Writes an attendance status ('Attended' | 'No-show') to column K for the row
-// identified by signup_id (column H).  Returns { ok, error? }.
-async function markAttendance(signupId, status) {
-  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
-  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+// Looks up today's signups for a person that have been checked in but not yet checked out.
+// No strict time window for check-out — just needs to be the same day.
+async function getTodayCheckoutsForPerson(email, name) {
+  const today   = todayPacific();
+  const signups = await getAllSignups();
+  return signups.filter(s =>
+    s.email.toLowerCase() === email.toLowerCase().trim() &&
+    s.name.toLowerCase()  === name.toLowerCase().trim()  &&
+    s.shift_date === today &&
+    s.attendance === 'Attended' &&
+    !s.checkout_time
+  );
+}
 
+// Helper — finds the 1-indexed sheet row for a signup_id.
+async function findSheetRow(sheets, signupId) {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
     range:         SHEET_RANGE,
   });
-
   const rows = res.data.values || [];
-  let targetRow = -1;
-
   for (let i = 1; i < rows.length; i++) {
     if ((rows[i][7] || '').trim().toUpperCase() === signupId.trim().toUpperCase()) {
-      targetRow = i + 1; // sheet rows are 1-indexed; row 1 is the header
-      break;
+      return { row: i + 1, rowData: rows[i] };
+    }
+  }
+  return { row: -1, rowData: null };
+}
+
+// Marks a volunteer as checked in: sets K=Attended, L=check-in timestamp.
+async function markCheckIn(signupId) {
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+
+  const { row } = await findSheetRow(sheets, signupId);
+  if (row === -1) return { ok: false, error: 'Signup not found.' };
+
+  const now = new Date();
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: {
+      valueInputOption: 'RAW',
+      data: [
+        { range: `${SHEET_TAB}!K${row}`, values: [['Attended']] },
+        { range: `${SHEET_TAB}!L${row}`, values: [[formatPacific(now)]] },
+      ],
+    },
+  });
+
+  return { ok: true, checkin_time: formatPacific(now) };
+}
+
+// Marks a volunteer as checked out: sets M=check-out timestamp, N=hours worked.
+async function markCheckOut(signupId) {
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+
+  const { row, rowData } = await findSheetRow(sheets, signupId);
+  if (row === -1) return { ok: false, error: 'Signup not found.' };
+
+  const checkinStr = rowData ? (rowData[11] || '') : '';
+  const now        = new Date();
+  let   hours      = '';
+
+  if (checkinStr) {
+    // Parse the stored Pacific-time string back to a Date for hour computation.
+    const checkinDate = new Date(checkinStr);
+    if (!isNaN(checkinDate)) {
+      hours = ((now - checkinDate) / (1000 * 60 * 60)).toFixed(2);
     }
   }
 
-  if (targetRow === -1) return { ok: false, error: 'Signup not found.' };
-
-  await sheets.spreadsheets.values.update({
-    spreadsheetId:   SHEET_ID,
-    range:           `${SHEET_TAB}!K${targetRow}`,
-    valueInputOption: 'RAW',
-    requestBody:     { values: [[status]] },
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: {
+      valueInputOption: 'RAW',
+      data: [
+        { range: `${SHEET_TAB}!M${row}`, values: [[formatPacific(now)]] },
+        { range: `${SHEET_TAB}!N${row}`, values: [[hours]] },
+      ],
+    },
   });
 
-  return { ok: true };
+  return { ok: true, checkout_time: formatPacific(now), hours };
 }
 
 // Scans all signups for a given date and writes 'No-show' to any row where
@@ -851,4 +957,4 @@ async function getPasswords() {
   return result;
 }
 
-module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, ensureHeaders, getPasswords, getTodaySignupsForEmail, markAttendance, markNoShows };
+module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, ensureHeaders, getPasswords, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows };

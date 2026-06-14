@@ -20,8 +20,10 @@ const {
   cancelSignupById,
   ensureHeaders,
   getPasswords,
-  getTodaySignupsForEmail,
-  markAttendance,
+  getTodaySignupsForPerson,
+  getTodayCheckoutsForPerson,
+  markCheckIn,
+  markCheckOut,
   markNoShows,
 } = require('./google');
 
@@ -178,16 +180,16 @@ app.get('/api/admin/shifts', requireAdmin, async (req, res) => {
   }
 });
 
-// ── Check-in API ──────────────────────────────────────────────────────────────
+// ── Check-in / Check-out API ──────────────────────────────────────────────────
 
-// GET /api/checkin?email=...
-// Returns today's signups for the given email (for the check-in page).
+// GET /api/checkin?email=&name=
+// Returns today's active-window signups for the given person (email + name).
 app.get('/api/checkin', async (req, res) => {
   const email = (req.query.email || '').trim();
-  if (!email) return res.status(400).json({ error: 'Email is required.' });
+  const name  = (req.query.name  || '').trim();
+  if (!email || !name) return res.status(400).json({ error: 'Email and name are required.' });
   try {
-    const signups = await getTodaySignupsForEmail(email);
-    res.json(signups);
+    res.json(await getTodaySignupsForPerson(email, name));
   } catch (err) {
     console.error('[GET /api/checkin]', err.message);
     res.status(500).json({ error: 'Could not look up signups. Please try again.' });
@@ -195,17 +197,46 @@ app.get('/api/checkin', async (req, res) => {
 });
 
 // POST /api/checkin  body: { signupId }
-// Marks a signup as Attended.
+// Marks a signup as Attended and records the check-in time.
 app.post('/api/checkin', async (req, res) => {
   const signupId = (req.body.signupId || '').trim().toUpperCase();
   if (!signupId) return res.status(400).json({ error: 'signupId is required.' });
   try {
-    const result = await markAttendance(signupId, 'Attended');
+    const result = await markCheckIn(signupId);
     if (!result.ok) return res.status(404).json({ error: result.error });
-    res.json({ ok: true });
+    res.json({ ok: true, checkin_time: result.checkin_time });
   } catch (err) {
     console.error('[POST /api/checkin]', err.message);
     res.status(500).json({ error: 'Could not record check-in. Please try again.' });
+  }
+});
+
+// GET /api/checkout?email=&name=
+// Returns today's checked-in (but not yet checked-out) signups for this person.
+app.get('/api/checkout', async (req, res) => {
+  const email = (req.query.email || '').trim();
+  const name  = (req.query.name  || '').trim();
+  if (!email || !name) return res.status(400).json({ error: 'Email and name are required.' });
+  try {
+    res.json(await getTodayCheckoutsForPerson(email, name));
+  } catch (err) {
+    console.error('[GET /api/checkout]', err.message);
+    res.status(500).json({ error: 'Could not look up signups. Please try again.' });
+  }
+});
+
+// POST /api/checkout  body: { signupId }
+// Records check-out time and computes hours worked.
+app.post('/api/checkout', async (req, res) => {
+  const signupId = (req.body.signupId || '').trim().toUpperCase();
+  if (!signupId) return res.status(400).json({ error: 'signupId is required.' });
+  try {
+    const result = await markCheckOut(signupId);
+    if (!result.ok) return res.status(404).json({ error: result.error });
+    res.json({ ok: true, checkout_time: result.checkout_time, hours: result.hours });
+  } catch (err) {
+    console.error('[POST /api/checkout]', err.message);
+    res.status(500).json({ error: 'Could not record check-out. Please try again.' });
   }
 });
 
