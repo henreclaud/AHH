@@ -475,8 +475,8 @@ async function getUpcomingSignupsByEmail(email) {
   return signups
     .filter(s =>
       s.email.toLowerCase() === norm &&
-      s.shift_date >= today &&
-      s.attendance !== 'Attended'
+      s.attendance !== 'Attended' &&
+      s.attendance !== 'No-show'
     )
     .map(s => ({
       signup_id:  s.signup_id,
