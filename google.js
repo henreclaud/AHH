@@ -783,8 +783,8 @@ async function getTodaySignupsForPerson(email, name) {
   return signups.filter(s =>
     s.email.toLowerCase() === email.toLowerCase().trim() &&
     s.name.toLowerCase()  === name.toLowerCase().trim()  &&
-    s.shift_date === today &&
-    isCheckinWindowOpen(s.shift_time)
+    s.shift_date === today
+    // time window disabled for testing — re-enable by adding: && isCheckinWindowOpen(s.shift_time)
   );
 }
 
