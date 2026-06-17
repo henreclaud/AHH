@@ -30,8 +30,8 @@ const COL = { NAME: 1, EMAIL: 2, SHIFT_NAME: 4, DATE: 5, TIME: 6, REMINDED: 8 };
 const SHEET_RANGE = 'signups!A:I';
 
 // The reminder window: send when the shift is between 23 and 25 hours away.
-const WINDOW_MIN_MS = 0;                      // testing: send for any upcoming shift
-const WINDOW_MAX_MS = 30 * 24 * 60 * 60 * 1000; // testing: up to 30 days away
+const WINDOW_MIN_MS = 23 * 60 * 60 * 1000;  // send when shift is 23–25 hours away
+const WINDOW_MAX_MS = 25 * 60 * 60 * 1000;
 
 // ── Google Auth ───────────────────────────────────────────────────────────────
 
@@ -128,11 +128,16 @@ async function main() {
     if (!email || !dateStr || !timeStr) { skipped++; continue; }
     if (reminded === 'yes')             { skipped++; continue; }
 
-    // TESTING: skip only if the shift date is strictly in the past (date-only check).
-    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
-    if (dateStr < todayStr) { skipped++; continue; }
+    const shiftStart = parseShiftStartUTC(dateStr, timeStr);
+    if (!shiftStart) {
+      console.warn(`[reminders] Row ${i + 1}: could not parse time "${timeStr}" — skipping.`);
+      skipped++;
+      continue;
+    }
 
-    if (true) { // TESTING: send for all today-or-future shifts
+    const diff = shiftStart - now; // ms until shift starts
+
+    if (diff >= WINDOW_MIN_MS && diff <= WINDOW_MAX_MS) {
       const startTime = timeStr.split(/[–\-]/)[0].trim();
       try {
         await sendReminderEmail({
