@@ -1,12 +1,15 @@
 // mailer.js — email sending via Nodemailer + Gmail.
-// To switch providers (SendGrid, Postmark, SES, etc.) just replace this file.
-// The send-reminders.js script only calls sendReminderEmail() — nothing else.
+// The send-reminders.js script (GitHub Actions) uses sendReminderEmail() via SMTP.
+// The server (Render) uses sendUnregisteredAlert() via Gmail API over HTTPS,
+// because Render blocks outbound SMTP connections.
 
 'use strict';
 
-const nodemailer = require('nodemailer');
+const nodemailer       = require('nodemailer');
+const { google }       = require('googleapis');
 
-// Build a transporter from env vars each time (picks up any runtime changes).
+// ── SMTP transport — used by send-reminders.js (GitHub Actions only) ──────────
+
 function createTransport() {
   const user = process.env.GMAIL_USER;
   const pass = process.env.GMAIL_APP_PASSWORD;
@@ -19,6 +22,37 @@ function createTransport() {
     secure: true,
     auth: { user, pass },
   });
+}
+
+// ── Gmail API client — used by the Render server (HTTPS, never blocked) ──────
+
+async function getGmailClient() {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON not set.');
+  let creds;
+  try { creds = JSON.parse(raw); }
+  catch { creds = JSON.parse(raw.replace(/\\n/g, '\n')); }
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: creds,
+    scopes: ['https://www.googleapis.com/auth/gmail.send'],
+  });
+  const client = await auth.getClient();
+  // Impersonate the sending address via domain-wide delegation.
+  client.subject = process.env.GMAIL_USER;
+  return google.gmail({ version: 'v1', auth: client });
+}
+
+function buildRawMessage({ from, to, subject, text }) {
+  const lines = [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    text,
+  ];
+  return Buffer.from(lines.join('\r\n')).toString('base64url');
 }
 
 /**
@@ -94,7 +128,7 @@ async function sendReminderEmail({ to, name, shiftName, date, time, location, ca
  * @param {string} opts.time      Shift time string, e.g. "9:00am–11:00am"
  */
 async function sendUnregisteredAlert({ name, email, shiftName, date, time }) {
-  const transport = createTransport();
+  const gmail = await getGmailClient();
 
   const d = new Date(date + 'T12:00:00Z');
   const prettyDate = d.toLocaleDateString('en-US', {
@@ -102,18 +136,18 @@ async function sendUnregisteredAlert({ name, email, shiftName, date, time }) {
   });
 
   const staffUrl = 'https://ahh-yozo.onrender.com/staff';
-
-  const body =
+  const text =
     `${name} (${email}) just signed up for ${shiftName} on ${prettyDate} at ${time} ` +
     `and is not a registered volunteer. Please review at ${staffUrl}`;
 
-  await transport.sendMail({
+  const raw = buildRawMessage({
     from:    `"Animal Assisted Happiness" <${process.env.GMAIL_USER}>`,
-    to:      'henry.p.kolb@gmail.com', // TESTING — change back to volunteercheck@aahsmilefarm.org
+    to:      'henry.p.kolb@gmail.com', // TESTING — change to volunteercheck@aahsmilefarm.org when done
     subject: 'Unregistered volunteer signup alert',
-    text:    body,
-    html:    `<p>${body.replace(staffUrl, `<a href="${staffUrl}">${staffUrl}</a>`)}</p>`,
+    text,
   });
+
+  await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
 }
 
 module.exports = { sendReminderEmail, sendUnregisteredAlert };
