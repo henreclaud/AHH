@@ -109,7 +109,7 @@ async function sendUnregisteredAlert({ name, email, shiftName, date, time }) {
 
   await transport.sendMail({
     from:    `"Animal Assisted Happiness" <${process.env.GMAIL_USER}>`,
-    to:      'volunteercheck@aahsmilefarm.org',
+    to:      'henry.p.kolb@gmail.com', // TESTING — change back to volunteercheck@aahsmilefarm.org
     subject: 'Unregistered volunteer signup alert',
     text:    body,
     html:    `<p>${body.replace(staffUrl, `<a href="${staffUrl}">${staffUrl}</a>`)}</p>`,
