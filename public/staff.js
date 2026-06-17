@@ -272,7 +272,7 @@ function createCard(shift) {
     // Determine whether this shift is in the future (for ⏳ badge).
     const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local (Pacific) time
 
-    shift.signups.forEach(({ name, email, registered, attendance, checkin_time, checkout_time, hours_logged }) => {
+    shift.signups.forEach(({ name, email, registered, is_ya, attendance, checkin_time, checkout_time, hours_logged }) => {
       const li = document.createElement('li');
 
       let attendanceBadge = '';
@@ -292,11 +292,13 @@ function createCard(shift) {
         hoursHtml += `</div>`;
       }
 
+      const yaBadge = is_ya ? '<span class="ya-badge">🌟 Youth Ambassador</span>' : '';
       li.innerHTML = `
         <div class="signup-row">
           <span class="signup-name">${escapeHtml(name)}</span>
           <a class="signup-email" href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>
           ${attendanceBadge}
+          ${yaBadge}
         </div>
         ${hoursHtml}
         ${registered === 'No' ? '<div class="signup-unregistered">⚠️ Not a registered volunteer</div>' : ''}

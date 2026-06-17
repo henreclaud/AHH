@@ -489,10 +489,14 @@ async function getUpcomingSignupsByEmail(email) {
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 // Shared helper — adds live spot counts to a list of cached shifts.
+// Youth Ambassadors (registered === 'YA') don't count toward the spot limit.
 async function _withCounts(shifts) {
   const signups = await getAllSignups();
-  const counts  = {};
-  for (const s of signups) counts[s.shift_id] = (counts[s.shift_id] || 0) + 1;
+  const counts  = {};  // non-YA signups only
+  for (const s of signups) {
+    if (s.registered === 'YA') continue;
+    counts[s.shift_id] = (counts[s.shift_id] || 0) + 1;
+  }
   return shifts.map(shift => {
     const taken      = counts[shift.id] || 0;
     const spots_left = Math.max(0, shift.capacity - taken);
@@ -532,6 +536,7 @@ async function getAdminShifts() {
   for (const s of signups) {
     (byShift[s.shift_id] = byShift[s.shift_id] || []).push({
       name: s.name, email: s.email, registered: s.registered,
+      is_ya: s.registered === 'YA',
       attendance: s.attendance, signup_id: s.signup_id,
       checkin_time: s.checkin_time, checkout_time: s.checkout_time, hours_logged: s.hours_logged,
     });
@@ -546,11 +551,11 @@ async function getAdminShifts() {
 
 // ── Registered volunteers cache ───────────────────────────────────────────────
 //
-// The "registered volunteers" tab holds a sorted list of approved email addresses.
-// We cache it for 5 minutes to avoid hitting the Sheets API on every signup.
-// Binary search is used for O(log n) lookup — important for thousands of entries.
+// The "registered volunteers" tab holds approved volunteer emails plus flags.
+// Cache: Map<lowercaseEmail, { registered: true, is_ya: boolean }>
+// Binary search is no longer needed — Map lookup is O(1).
 
-let _regCache      = null;   // sorted lowercase email array
+let _regCache      = null;   // Map<email, { registered, is_ya }>
 let _regExpiresAt  = 0;
 const REG_CACHE_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -562,33 +567,40 @@ async function getRegisteredEmails() {
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range:         `${REG_TAB}!A:A`,
+    range:         `${REG_TAB}!A:Z`,
   });
 
-  // Normalise to lowercase, drop blanks/headers.
-  const emails = (res.data.values || [])
-    .map(r => (r[0] || '').trim().toLowerCase())
-    .filter(e => e && e.includes('@'));
+  const rows = res.data.values || [];
+  if (!rows.length) { _regCache = new Map(); _regExpiresAt = Date.now() + REG_CACHE_MS; return _regCache; }
 
-  _regCache     = emails; // assume already sorted; if not, sort defensively
-  _regCache.sort();
+  // First row is the header — find the email column (col A, index 0) and the
+  // "Youth Ambassador" column (case-insensitive header match).
+  const headers  = rows[0].map(h => (h || '').trim().toLowerCase());
+  const emailIdx = headers.findIndex(h => h === 'email' || h.includes('@') || h === 'emails');
+  const yaIdx    = headers.findIndex(h => h.includes('youth') || h.includes('ambassador') || h === 'ya');
+
+  // Fall back to column A for email if header not found.
+  const eIdx = emailIdx >= 0 ? emailIdx : 0;
+
+  const map = new Map();
+  for (let i = 1; i < rows.length; i++) {
+    const email = (rows[i][eIdx] || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) continue;
+    const yaVal = yaIdx >= 0 ? (rows[i][yaIdx] || '').trim() : '';
+    const is_ya = yaVal === '1' || yaVal.toLowerCase() === 'true';
+    map.set(email, { registered: true, is_ya });
+  }
+
+  _regCache     = map;
   _regExpiresAt = Date.now() + REG_CACHE_MS;
-  console.log(`[registered] loaded ${emails.length} emails from sheet`);
+  console.log(`[registered] loaded ${map.size} volunteers (YA col: ${yaIdx >= 0 ? headers[yaIdx] : 'not found'})`);
   return _regCache;
 }
 
-// Binary search — returns true if email (lowercased) is in the sorted array.
-function binarySearchEmail(sortedEmails, email) {
-  const target = email.toLowerCase();
-  let lo = 0, hi = sortedEmails.length - 1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >>> 1;
-    const cmp = sortedEmails[mid].localeCompare(target);
-    if (cmp === 0) return true;
-    if (cmp < 0)   lo = mid + 1;
-    else            hi = mid - 1;
-  }
-  return false;
+// Returns { registered: boolean, is_ya: boolean } for an email address.
+function lookupVolunteer(regMap, email) {
+  const entry = regMap.get(email.toLowerCase().trim());
+  return entry || { registered: false, is_ya: false };
 }
 
 // Validates and records a volunteer signup.
@@ -615,26 +627,30 @@ async function createSignup(shiftId, name, email) {
     return { ok: false, error: 'You are already signed up for this shift.' };
   }
 
-  // Capacity check — count existing signups for this shift.
-  const taken = allSignups.filter(s => s.shift_id === shiftId).length;
-  if (taken >= shift.capacity) {
-    return { ok: false, error: 'Sorry, this shift is now full.' };
+  // Check registration and YA status — non-fatal if the lookup fails.
+  let registeredFlag = '';
+  let isYA           = false;
+  try {
+    const regMap = await getRegisteredEmails();
+    const info   = lookupVolunteer(regMap, email);
+    registeredFlag = info.registered ? 'Yes' : 'No';
+    isYA           = info.is_ya;
+  } catch (err) {
+    console.warn('[registered] could not check registration:', err.message);
+  }
+
+  // Capacity check — Youth Ambassadors don't count against the spot limit.
+  if (!isYA) {
+    const taken = allSignups.filter(s => s.shift_id === shiftId && s.registered !== 'YA').length;
+    if (taken >= shift.capacity) {
+      return { ok: false, error: 'Sorry, this shift is now full.' };
+    }
   }
 
   // Generate a unique signup ID (retry if collision, though extremely unlikely).
   const allIds = new Set(allSignups.map(s => s.signup_id).filter(Boolean));
   let signupId;
   do { signupId = generateSignupId(); } while (allIds.has(signupId));
-
-  // Check if this email is in the registered volunteers list.
-  // Failures are non-fatal — we still save the signup, just can't flag it.
-  let registeredFlag = '';
-  try {
-    const regEmails = await getRegisteredEmails();
-    registeredFlag  = binarySearchEmail(regEmails, email) ? 'Yes' : 'No';
-  } catch (err) {
-    console.warn('[registered] could not check registration:', err.message);
-  }
 
   // Append a new row to the Google Sheet.
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
@@ -654,7 +670,7 @@ async function createSignup(shiftId, name, email) {
         `${shift.start_time}–${shift.end_time}`,
         signupId,       // col H — Signup ID
         '',             // col I — Reminded (managed by send-reminders.js)
-        registeredFlag, // col J — Registered: 'Yes', 'No', or '' if lookup failed
+        isYA ? 'YA' : registeredFlag, // col J — 'YA', 'Yes', 'No', or '' if lookup failed
       ]],
     },
   });
