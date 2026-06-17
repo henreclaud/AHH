@@ -30,8 +30,8 @@ const COL = { NAME: 1, EMAIL: 2, SHIFT_NAME: 4, DATE: 5, TIME: 6, REMINDED: 8 };
 const SHEET_RANGE = 'signups!A:I';
 
 // The reminder window: send when the shift is between 23 and 25 hours away.
-const WINDOW_MIN_MS = 23 * 60 * 60 * 1000;
-const WINDOW_MAX_MS = 25 * 60 * 60 * 1000;
+const WINDOW_MIN_MS = 0;                      // testing: send for any upcoming shift
+const WINDOW_MAX_MS = 30 * 24 * 60 * 60 * 1000; // testing: up to 30 days away
 
 // ── Google Auth ───────────────────────────────────────────────────────────────
 
