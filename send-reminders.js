@@ -128,16 +128,11 @@ async function main() {
     if (!email || !dateStr || !timeStr) { skipped++; continue; }
     if (reminded === 'yes')             { skipped++; continue; }
 
-    const shiftStart = parseShiftStartUTC(dateStr, timeStr);
-    if (!shiftStart) {
-      console.warn(`[reminders] Row ${i + 1}: could not parse time "${timeStr}" — skipping.`);
-      skipped++;
-      continue;
-    }
+    // TESTING: skip only if the shift date is strictly in the past (date-only check).
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+    if (dateStr < todayStr) { skipped++; continue; }
 
-    const diff = shiftStart - now; // ms until shift starts
-
-    if (diff >= WINDOW_MIN_MS && diff <= WINDOW_MAX_MS) {
+    if (true) { // TESTING: send for all today-or-future shifts
       const startTime = timeStr.split(/[–\-]/)[0].trim();
       try {
         await sendReminderEmail({
