@@ -83,4 +83,37 @@ async function sendReminderEmail({ to, name, shiftName, date, time, location, ca
   });
 }
 
-module.exports = { sendReminderEmail };
+/**
+ * Send an alert to staff when an unregistered volunteer signs up.
+ *
+ * @param {object} opts
+ * @param {string} opts.name      Volunteer's full name
+ * @param {string} opts.email     Volunteer's email
+ * @param {string} opts.shiftName Shift title
+ * @param {string} opts.date      "YYYY-MM-DD"
+ * @param {string} opts.time      Shift time string, e.g. "9:00am–11:00am"
+ */
+async function sendUnregisteredAlert({ name, email, shiftName, date, time }) {
+  const transport = createTransport();
+
+  const d = new Date(date + 'T12:00:00Z');
+  const prettyDate = d.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+
+  const staffUrl = 'https://ahh-yozo.onrender.com/staff';
+
+  const body =
+    `${name} (${email}) just signed up for ${shiftName} on ${prettyDate} at ${time} ` +
+    `and is not a registered volunteer. Please review at ${staffUrl}`;
+
+  await transport.sendMail({
+    from:    `"Animal Assisted Happiness" <${process.env.GMAIL_USER}>`,
+    to:      'volunteercheck@aahsmilefarm.org',
+    subject: 'Unregistered volunteer signup alert',
+    text:    body,
+    html:    `<p>${body.replace(staffUrl, `<a href="${staffUrl}">${staffUrl}</a>`)}</p>`,
+  });
+}
+
+module.exports = { sendReminderEmail, sendUnregisteredAlert };

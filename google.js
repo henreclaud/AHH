@@ -7,6 +7,7 @@
 'use strict';
 
 const { google } = require('googleapis');
+const { sendUnregisteredAlert } = require('./mailer');
 
 // ── Environment variables ────────────────────────────────────────────────────
 // GOOGLE_CALENDAR_ID          — the calendar to read shifts from
@@ -674,6 +675,16 @@ async function createSignup(shiftId, name, email) {
       ]],
     },
   });
+
+  // Alert staff if the volunteer is not registered (fire-and-forget, non-fatal).
+  if (registeredFlag === 'No') {
+    sendUnregisteredAlert({
+      name, email,
+      shiftName: shift.title,
+      date:      shift.date,
+      time:      `${shift.start_time}–${shift.end_time}`,
+    }).catch(err => console.warn('[alert] unregistered alert failed:', err.message));
+  }
 
   return { ok: true, message: `You're signed up for ${shift.title}. Thank you!`, signupId };
 }
