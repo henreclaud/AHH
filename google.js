@@ -604,10 +604,12 @@ async function createSignup(shiftId, name, email) {
     return { ok: false, error: 'That shift no longer exists.' };
   }
 
-  // Duplicate check — same email for the same Google Calendar event ID.
+  // Duplicate check — same name AND email for the same shift (case-insensitive).
+  // Two people sharing an email but with different names (e.g. parent + child) are allowed.
   const duplicate = allSignups.some(
     s => s.shift_id === shiftId &&
-         s.email.toLowerCase() === email.toLowerCase()
+         s.email.toLowerCase() === email.toLowerCase() &&
+         s.name.toLowerCase()  === name.toLowerCase()
   );
   if (duplicate) {
     return { ok: false, error: 'You are already signed up for this shift.' };
