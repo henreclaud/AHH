@@ -1687,3 +1687,25 @@ input:focus {
   .seg { padding: 6px 10px; font-size: 0.82rem; }
   .chip-row { gap: 6px; }
 }
+
+/* ─── Mobile header ──────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  /* Hide the long brand name — just show the heart logo to save header space */
+  .brand-text { display: none; }
+
+  /* Shrink nav buttons so they don't crowd the header */
+  .header-links .btn {
+    padding: 7px 13px;
+    font-size: 0.82rem;
+  }
+
+  /* Filter bar sits right below the tighter header (logo 42px + 2×10px padding) */
+  .filter-bar { top: 62px; }
+
+  /* Sign-up dialog fills more of the screen on small phones */
+  dialog { width: 96%; border-radius: 14px; }
+
+  /* Cancel card buttons stack vertically */
+  .cancel-confirm-btns { flex-direction: column; }
+  .cancel-confirm-btns .btn { width: 100%; }
+}
