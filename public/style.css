@@ -1424,6 +1424,20 @@ input:focus {
   white-space: pre-wrap;
 }
 
+.scard-desc-toggle {
+  margin-top: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--purple);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.scard-desc-toggle:hover { opacity: 0.75; }
+
 /* Staff-only description block */
 .scard-desc-staff {
   background: #fffbf0;

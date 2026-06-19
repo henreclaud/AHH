@@ -153,9 +153,35 @@ function createCard(shift) {
 
   // Volunteer-facing description (null = no FOR VOLUNTEERS header → show nothing)
   if (shift.description_volunteers) {
+    const PREVIEW_CHARS = 120;
+    const full = sanitizeHtml(shift.description_volunteers);
+    const needsToggle = shift.description_volunteers.length > PREVIEW_CHARS;
+
     const desc = document.createElement('div');
     desc.className = 'scard-desc';
-    desc.innerHTML = sanitizeHtml(shift.description_volunteers);
+
+    if (!needsToggle) {
+      desc.innerHTML = full;
+    } else {
+      const preview = sanitizeHtml(shift.description_volunteers.slice(0, PREVIEW_CHARS).trimEnd()) + '…';
+      const textEl = document.createElement('span');
+      textEl.innerHTML = preview;
+
+      const toggle = document.createElement('button');
+      toggle.className = 'scard-desc-toggle';
+      toggle.textContent = 'Show more';
+      let expanded = false;
+      toggle.addEventListener('click', () => {
+        expanded = !expanded;
+        textEl.innerHTML = expanded ? full : preview;
+        toggle.textContent = expanded ? 'Show less' : 'Show more';
+      });
+
+      desc.appendChild(textEl);
+      desc.appendChild(document.createElement('br'));
+      desc.appendChild(toggle);
+    }
+
     card.appendChild(desc);
   }
 
