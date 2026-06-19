@@ -130,7 +130,7 @@ async function sendUnregisteredAlert({ name, email, shiftName, date, time }) {
     `and is not a registered volunteer. Please review at ${staffUrl}`;
 
   await sendViaResend({
-    to:      'hkolb@students.gissv.org', // TESTING — Resend free plan only allows own account email until domain verified
+    to:      'henry.p.kolb@gmail.com', // TESTING — change to volunteercheck@aahsmilefarm.org when domain verified on Resend
     subject: 'Unregistered volunteer signup alert',
     text,
   });
