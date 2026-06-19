@@ -5,8 +5,7 @@
 
 'use strict';
 
-const nodemailer       = require('nodemailer');
-const { google }       = require('googleapis');
+const nodemailer = require('nodemailer');
 
 // ── SMTP transport — used by send-reminders.js (GitHub Actions only) ──────────
 
@@ -24,35 +23,27 @@ function createTransport() {
   });
 }
 
-// ── Gmail API client — used by the Render server (HTTPS, never blocked) ──────
+// ── Resend API — used by the Render server (HTTPS, never blocked) ─────────────
 
-async function getGmailClient() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON not set.');
-  let creds;
-  try { creds = JSON.parse(raw); }
-  catch { creds = JSON.parse(raw.replace(/\\n/g, '\n')); }
+async function sendViaResend({ to, subject, text }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error('RESEND_API_KEY is not set.');
 
-  const auth = new google.auth.GoogleAuth({
-    credentials: creds,
-    scopes: ['https://www.googleapis.com/auth/gmail.send'],
+  const res = await fetch('https://api.resend.com/emails', {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from:    'Animal Assisted Happiness <onboarding@resend.dev>',
+      to:      [to],
+      subject,
+      text,
+    }),
   });
-  const client = await auth.getClient();
-  // Impersonate the sending address via domain-wide delegation.
-  client.subject = process.env.GMAIL_USER;
-  return google.gmail({ version: 'v1', auth: client });
-}
 
-function buildRawMessage({ from, to, subject, text }) {
-  const lines = [
-    `From: ${from}`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    'Content-Type: text/plain; charset=utf-8',
-    '',
-    text,
-  ];
-  return Buffer.from(lines.join('\r\n')).toString('base64url');
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Resend error ${res.status}: ${err}`);
+  }
 }
 
 /**
@@ -128,8 +119,6 @@ async function sendReminderEmail({ to, name, shiftName, date, time, location, ca
  * @param {string} opts.time      Shift time string, e.g. "9:00am–11:00am"
  */
 async function sendUnregisteredAlert({ name, email, shiftName, date, time }) {
-  const gmail = await getGmailClient();
-
   const d = new Date(date + 'T12:00:00Z');
   const prettyDate = d.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
@@ -140,14 +129,11 @@ async function sendUnregisteredAlert({ name, email, shiftName, date, time }) {
     `${name} (${email}) just signed up for ${shiftName} on ${prettyDate} at ${time} ` +
     `and is not a registered volunteer. Please review at ${staffUrl}`;
 
-  const raw = buildRawMessage({
-    from:    `"Animal Assisted Happiness" <${process.env.GMAIL_USER}>`,
+  await sendViaResend({
     to:      'henry.p.kolb@gmail.com', // TESTING — change to volunteercheck@aahsmilefarm.org when done
     subject: 'Unregistered volunteer signup alert',
     text,
   });
-
-  await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
 }
 
 module.exports = { sendReminderEmail, sendUnregisteredAlert };
