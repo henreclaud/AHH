@@ -1317,7 +1317,8 @@ input:focus {
 /* ─── Shift card grid ────────────────────────────────────────────────────── */
 .shift-grid-compact {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  /* min(270px, 100%) keeps the column from ever exceeding the screen width */
+  grid-template-columns: repeat(auto-fill, minmax(min(270px, 100%), 1fr));
   gap: 14px;
   margin-bottom: 48px;
 }
@@ -1330,6 +1331,9 @@ input:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* min-width:0 lets the card shrink to its column. Without it, a card with a
+     long no-wrap location would stretch the whole column past the screen. */
+  min-width: 0;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 .scard:hover {
