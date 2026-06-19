@@ -6,17 +6,9 @@
 
 'use strict';
 
+const crypto = require('crypto');
 const { google } = require('googleapis');
 const { sendUnregisteredAlert } = require('./mailer');
-
-// gtoken (used internally by googleapis for service-account auth) hardcodes
-// the old https://www.googleapis.com/oauth2/v4/token endpoint.  On Render,
-// node-fetch 2 (gaxios's default) gets a "Premature close" connecting there.
-// Switching gaxios to Node.js built-in fetch (undici, HTTP/2-capable) fixes it.
-if (typeof globalThis.fetch === 'function') {
-  const gaxios = require('gaxios');
-  gaxios.instance.defaults.fetchImplementation = globalThis.fetch;
-}
 
 // ── Environment variables ────────────────────────────────────────────────────
 // GOOGLE_CALENDAR_ID          — the calendar to read shifts from
@@ -47,17 +39,90 @@ function getCredentials() {
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
-// One GoogleAuth instance shared across the process.
+// We do service-account auth by hand instead of using google.auth.GoogleAuth.
+//
+// Why: GoogleAuth delegates token fetching to gtoken, which hardcodes the
+// LEGACY endpoint https://www.googleapis.com/oauth2/v4/token and fetches it via
+// node-fetch 2.  On Render that connection dies with "Premature close", so the
+// whole app can't authenticate.  Instead we sign the JWT ourselves and POST it
+// to the MODERN endpoint https://oauth2.googleapis.com/token using Node's
+// built-in fetch (undici), which is reliable on Render.  The resulting token is
+// handed to an OAuth2 client whose refreshHandler re-runs this whenever the
+// token expires.  We also point that client's transporter at built-in fetch so
+// the actual Sheets/Calendar API calls use undici too.
+
+const SCOPES = [
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/spreadsheets',
+].join(' ');
+
+const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+function b64url(input) {
+  return Buffer.from(input).toString('base64url');
+}
+
+// Sign a JWT with the service-account key and exchange it for an access token.
+async function fetchAccessToken() {
+  if (typeof fetch !== 'function') {
+    throw new Error('Global fetch is unavailable — Node 18+ is required.');
+  }
+  const creds = getCredentials();
+  const now = Math.floor(Date.now() / 1000);
+
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const claim = {
+    iss:   creds.client_email,
+    scope: SCOPES,
+    aud:   TOKEN_URL,
+    exp:   now + 3600,
+    iat:   now,
+  };
+
+  const signingInput = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(claim))}`;
+  const signature = crypto.createSign('RSA-SHA256')
+    .update(signingInput)
+    .sign(creds.private_key, 'base64url');
+  const assertion = `${signingInput}.${signature}`;
+
+  const res = await fetch(TOKEN_URL, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body:    new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion,
+    }),
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Google token request failed (${res.status}): ${text}`);
+  }
+  const data = JSON.parse(text);
+  return { access_token: data.access_token, expires_in: data.expires_in || 3600 };
+}
+
+// One OAuth2 client shared across the process.  Its refreshHandler is called
+// automatically whenever the access token is missing or expired.
 let _auth;
 function getAuth() {
   if (!_auth) {
-    _auth = new google.auth.GoogleAuth({
-      credentials: getCredentials(),
-      scopes: [
-        'https://www.googleapis.com/auth/calendar.readonly',
-        'https://www.googleapis.com/auth/spreadsheets',
-      ],
-    });
+    _auth = new google.auth.OAuth2();
+    _auth.refreshHandler = async () => {
+      const { access_token, expires_in } = await fetchAccessToken();
+      return {
+        access_token,
+        // Refresh a minute early to avoid edge-of-expiry failures.
+        expiry_date: Date.now() + (expires_in - 60) * 1000,
+      };
+    };
+    // Route the actual API calls (Sheets/Calendar) through built-in fetch too.
+    if (typeof fetch === 'function' && _auth.transporter) {
+      _auth.transporter.defaults = {
+        ..._auth.transporter.defaults,
+        fetchImplementation: fetch,
+      };
+    }
   }
   return _auth;
 }
