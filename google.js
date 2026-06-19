@@ -9,6 +9,15 @@
 const { google } = require('googleapis');
 const { sendUnregisteredAlert } = require('./mailer');
 
+// gtoken (used internally by googleapis for service-account auth) hardcodes
+// the old https://www.googleapis.com/oauth2/v4/token endpoint.  On Render,
+// node-fetch 2 (gaxios's default) gets a "Premature close" connecting there.
+// Switching gaxios to Node.js built-in fetch (undici, HTTP/2-capable) fixes it.
+if (typeof globalThis.fetch === 'function') {
+  const gaxios = require('gaxios');
+  gaxios.instance.defaults.fetchImplementation = globalThis.fetch;
+}
+
 // ── Environment variables ────────────────────────────────────────────────────
 // GOOGLE_CALENDAR_ID          — the calendar to read shifts from
 // GOOGLE_SHEET_ID             — the spreadsheet to write signups to
