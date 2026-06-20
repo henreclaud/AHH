@@ -116,6 +116,15 @@ const resultsCount    = document.getElementById('results-count');
 const clearButton     = document.getElementById('clear-filters');
 const statNumber      = document.getElementById('stat-number');
 
+const reportDialog      = document.getElementById('report-dialog');
+const reportDialogTitle = document.getElementById('report-dialog-title');
+const reportDialogSub   = document.getElementById('report-dialog-sub');
+const reportDialogList  = document.getElementById('report-dialog-list');
+const reportDialogNotes = document.getElementById('report-dialog-notes');
+const saveNoteBtn       = document.getElementById('save-note-btn');
+const noteStatus        = document.getElementById('note-status');
+const reportDoneBtn     = document.getElementById('report-dialog-done');
+
 // ── State ────────────────────────────────────────────────────────────────────
 let allShifts = [];
 let selectedShiftId = null;
@@ -350,6 +359,16 @@ function createCard(shift) {
   }
   card.appendChild(btn);
 
+  // Add report button (only when there are signups to mark)
+  if (shift.signups && shift.signups.length > 0) {
+    const reportBtn = document.createElement('button');
+    reportBtn.type = 'button';
+    reportBtn.className = 'btn btn-secondary scard-btn';
+    reportBtn.textContent = 'Add report';
+    reportBtn.addEventListener('click', () => openReport(shift));
+    card.appendChild(reportBtn);
+  }
+
   return card;
 }
 
@@ -456,6 +475,133 @@ signupForm.addEventListener('submit', async e => {
   } catch {
     formError.textContent = 'Sorry, something went wrong. Please try again.';
   }
+});
+
+// ── Report dialog ─────────────────────────────────────────────────────────────
+let _reportShift = null;
+
+function openReport(shift) {
+  _reportShift = shift;
+  reportDialogTitle.textContent = shift.title;
+  reportDialogSub.textContent   = `${formatDate(shift.date)} · ${shift.start_time}–${shift.end_time}`;
+  reportDialogNotes.value       = '';
+  noteStatus.textContent        = '';
+  buildReportList(shift);
+  reportDialog.showModal();
+}
+
+function buildReportList(shift) {
+  reportDialogList.innerHTML = '';
+  if (!shift.signups || !shift.signups.length) {
+    const p = document.createElement('p');
+    p.className   = 'scard-signups-empty';
+    p.textContent = 'No signups for this shift.';
+    reportDialogList.appendChild(p);
+    return;
+  }
+  shift.signups.forEach(vol => reportDialogList.appendChild(buildReportRow(vol)));
+}
+
+function buildReportRow(vol) {
+  const row = document.createElement('div');
+  row.className = 'report-vol-row';
+
+  const info = document.createElement('div');
+  info.className = 'report-vol-info';
+  info.innerHTML =
+    `<span class="report-vol-name">${escapeHtml(vol.name)}</span>` +
+    `<span class="report-vol-email">${escapeHtml(vol.email)}</span>`;
+  row.appendChild(info);
+
+  const statusEl = document.createElement('span');
+  setAttStatus(statusEl, vol.attendance, vol.hours_logged);
+  row.appendChild(statusEl);
+
+  const actions = document.createElement('div');
+  actions.className = 'report-vol-actions';
+
+  ['Attended', 'No-show'].forEach(s => {
+    const btn = document.createElement('button');
+    btn.type        = 'button';
+    btn.className   = 'btn ' + (s === 'Attended' ? 'btn-att-yes' : 'btn-att-no');
+    btn.textContent = s === 'Attended' ? '✓ Attended' : '✕ No-show';
+    if (vol.attendance === s) btn.classList.add('active');
+
+    btn.addEventListener('click', async () => {
+      if (btn.classList.contains('active')) return;
+      actions.querySelectorAll('button').forEach(b => { b.disabled = true; });
+      try {
+        const res  = await fetch('/api/staff/report/attendance', {
+          method:  'POST',
+          headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ signupId: vol.signup_id, status: s }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          vol.attendance   = s;
+          vol.hours_logged = data.hours != null ? data.hours.toFixed(2) : '';
+          setAttStatus(statusEl, s, vol.hours_logged);
+          actions.querySelectorAll('button').forEach(b => { b.disabled = false; b.classList.remove('active'); });
+          btn.classList.add('active');
+        } else {
+          actions.querySelectorAll('button').forEach(b => { b.disabled = false; });
+          alert(data.error || 'Could not save attendance.');
+        }
+      } catch {
+        actions.querySelectorAll('button').forEach(b => { b.disabled = false; });
+        alert('Could not save attendance. Please try again.');
+      }
+    });
+    actions.appendChild(btn);
+  });
+
+  row.appendChild(actions);
+  return row;
+}
+
+function setAttStatus(el, attendance, hours) {
+  if (attendance === 'Attended') {
+    el.textContent = hours ? `✅ ${hours}h` : '✅ Attended';
+    el.className   = 'report-vol-status att-attended';
+  } else if (attendance === 'No-show') {
+    el.textContent = '❌ No-show';
+    el.className   = 'report-vol-status att-noshow';
+  } else {
+    el.textContent = '⏳ Pending';
+    el.className   = 'report-vol-status att-pending';
+  }
+}
+
+saveNoteBtn.addEventListener('click', async () => {
+  const note  = reportDialogNotes.value.trim();
+  const shift = _reportShift;
+  if (!note || !shift) return;
+  saveNoteBtn.disabled    = true;
+  saveNoteBtn.textContent = 'Saving…';
+  noteStatus.textContent  = '';
+  try {
+    const res = await fetch('/api/staff/report/note', {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        date:      shift.date,
+        shiftName: shift.title,
+        shiftTime: `${shift.start_time}–${shift.end_time}`,
+        note,
+      }),
+    });
+    noteStatus.textContent    = res.ok ? 'Saved ✓' : 'Error — try again';
+    if (res.ok) reportDialogNotes.value = '';
+  } catch {
+    noteStatus.textContent = 'Error — try again';
+  }
+  saveNoteBtn.disabled    = false;
+  saveNoteBtn.textContent = 'Save note';
+});
+
+reportDoneBtn.addEventListener('click', () => {
+  reportDialog.close();
+  loadShifts();
 });
 
 // ── Date helpers ──────────────────────────────────────────────────────────────

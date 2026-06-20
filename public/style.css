@@ -349,6 +349,13 @@ dialog::backdrop {
 #signup-form h2 {
   margin: 0 0 4px;
 }
+#report-dialog {
+  max-width: 560px;
+  padding: 24px;
+}
+#report-dialog h2 {
+  margin: 0 0 4px;
+}
 .dialog-sub {
   margin: 0 0 8px;
   color: var(--muted);

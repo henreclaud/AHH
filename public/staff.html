@@ -98,7 +98,22 @@
         </div>
       </footer>
 
-      <dialog id="signup-dialog">
+      <!-- Attendance report dialog -->
+    <dialog id="report-dialog">
+      <h2 id="report-dialog-title">Attendance Report</h2>
+      <p id="report-dialog-sub" class="dialog-sub"></p>
+      <div id="report-dialog-list" class="report-table"></div>
+      <div class="report-notes-wrap">
+        <label class="report-notes-label">Shift notes</label>
+        <textarea id="report-dialog-notes" class="report-notes-textarea" rows="3"
+                  placeholder="Record anything notable about this shift…"></textarea>
+        <button type="button" id="save-note-btn" class="btn btn-secondary">Save note</button>
+        <p id="note-status" style="font-size:0.85rem;color:var(--purple);margin:4px 0 0;min-height:1.2em"></p>
+      </div>
+      <button type="button" id="report-dialog-done" class="btn btn-primary btn-full">Done</button>
+    </dialog>
+
+    <dialog id="signup-dialog">
         <form id="signup-form">
           <h2 id="dialog-title">Sign up</h2>
           <p class="dialog-sub">Pop your details in and you're on the team.</p>
@@ -122,6 +137,6 @@
     </div> <!-- /staff-main -->
 
     <script src="sanitize.js"></script>
-    <script src="staff.js?v=10"></script>
+    <script src="staff.js?v=11"></script>
   </body>
 </html>
