@@ -285,13 +285,17 @@ async function refreshCalendarCache() {
     // Skip events that are already full — they're at capacity and not available.
     if (/\bfull\b/i.test(rawTitle)) continue;
 
+    // A title wrapped entirely in { } marks the event as staff-only (hidden from volunteers).
+    const staff_only = rawTitle.startsWith('{');
+    const titleRaw   = staff_only ? rawTitle.replace(/^\{|\}$/g, '').trim() : rawTitle;
+
     // Try to get shift name from title; skip all-day/untitled events with no usable name.
-    const name = parseShiftName(rawTitle);
+    const name = parseShiftName(titleRaw);
     if (!name) continue;
 
     // Look for a capacity limit in the title first, then the description.
     // If neither has one, capacity is null — no limit is shown in the UI.
-    const capacity = parseCapacity(rawTitle) ?? parseCapacity(desc) ?? null;
+    const capacity = parseCapacity(titleRaw) ?? parseCapacity(desc) ?? null;
     const has_limit = capacity !== null;
 
     // Google Calendar sends dateTime for timed events and date for all-day events.
@@ -313,6 +317,7 @@ async function refreshCalendarCache() {
       end_time:   toHHMM(endDt),
       capacity:  has_limit ? capacity : 999999, // unlimited events never fill up
       has_limit,
+      staff_only,
       description_volunteers, // shown on volunteer + staff pages
       description_staff,      // shown on staff page only
     });
@@ -540,13 +545,16 @@ async function _withCounts(shifts) {
 }
 
 // Returns all upcoming shifts for the public volunteer page.
-// description_staff is intentionally omitted — it is staff-only information.
+// Excludes: events with no volunteer limit (QA#1), { }-wrapped titles (QA#2),
+// HIDE-prefixed titles, and staff-only fields are stripped from the response.
 async function getShifts() {
   const shifts = await getCachedShifts();
   const result = await _withCounts(shifts);
   return result
-    .filter(s => !/^hide\b/i.test(s.title || '')) // hide HIDE-prefixed events from volunteers
-    .map(({ description_staff, ...pub }) => pub); // strip staff text
+    .filter(s => s.has_limit)                      // no limit label = not open for signup
+    .filter(s => !s.staff_only)                    // { }-wrapped title = staff-only event
+    .filter(s => !/^hide\b/i.test(s.title || '')) // HIDE- prefix = staff-only event
+    .map(({ description_staff, staff_only, ...pub }) => pub);
 }
 
 // Returns all upcoming shifts for the staff page, including both description
