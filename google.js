@@ -1144,17 +1144,36 @@ async function markAttendanceReport(signupId, status, notes) {
 }
 
 // Appends a shift-level note to the 'shift_notes' tab.
+// Auto-creates the tab on first use if it doesn't exist.
 async function addShiftNote(date, shiftName, shiftTime, note) {
   if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
-  await sheets.spreadsheets.values.append({
-    spreadsheetId:    SHEET_ID,
-    range:            'shift_notes!A1',
-    valueInputOption: 'USER_ENTERED',
-    requestBody: {
-      values: [[new Date().toISOString(), date, shiftName, shiftTime, note]],
-    },
-  });
+
+  async function doAppend() {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId:    SHEET_ID,
+      range:            'shift_notes!A1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[new Date().toISOString(), date, shiftName, shiftTime, note]],
+      },
+    });
+  }
+
+  try {
+    await doAppend();
+  } catch (err) {
+    // Tab doesn't exist yet — create it and retry once.
+    if (err.code === 400 || (err.message || '').includes('Unable to parse range')) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SHEET_ID,
+        requestBody:   { requests: [{ addSheet: { properties: { title: 'shift_notes' } } }] },
+      });
+      await doAppend();
+    } else {
+      throw err;
+    }
+  }
   return { ok: true };
 }
 
