@@ -124,10 +124,12 @@ async function sendUnregisteredAlert({ name, email, shiftName, date, time }) {
     weekday: 'long', month: 'long', day: 'numeric',
   });
 
-  const staffUrl = 'https://ahh-yozo.onrender.com/staff';
-  const text =
-    `${name} (${email}) just signed up for ${shiftName} on ${prettyDate} at ${time} ` +
-    `and is not a registered volunteer. Please review at ${staffUrl}`;
+  const text = [
+    `${name} (${email}) just signed up for ${shiftName} on ${prettyDate} at ${time}`,
+    '',
+    'The volunteer does not appear to be registered. Please double check if they are ' +
+    'registered or not. If not, please ask them to register as a volunteer on our website.',
+  ].join('\n');
 
   await sendViaResend({
     to:      process.env.ALERT_EMAIL || 'volunteercheck@aahsmilefarm.org',
