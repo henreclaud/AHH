@@ -889,15 +889,31 @@ function formatPacific(date) {
 // Looks up signups for a given email + name on today's date (Pacific time)
 // that are within the check-in window (30 min before start → 30 min after end).
 // Matching on BOTH email and name lets two people sharing an email be tracked separately.
+// Returns a map of calendar event ID → location string for all cached shifts.
+async function _farmLocationMap() {
+  const farmAddr = (process.env.FARM_ADDRESS || '').trim().toLowerCase();
+  if (!farmAddr) return null; // no filter configured — allow all shifts
+  const shifts = await getCachedShifts();
+  const map = {};
+  shifts.forEach(s => { map[s.id] = (s.location || '').toLowerCase(); });
+  return { map, farmAddr };
+}
+
 async function getTodaySignupsForPerson(email, name) {
   const today   = todayPacific();
   const signups = await getAllSignups();
-  return signups.filter(s =>
+  let results = signups.filter(s =>
     s.email.toLowerCase() === email.toLowerCase().trim() &&
     s.name.toLowerCase()  === name.toLowerCase().trim()  &&
     s.shift_date === today &&
     isCheckinWindowOpen(s.shift_time)
   );
+
+  // When FARM_ADDRESS is set, restrict QR check-in to farm-location shifts only.
+  const loc = await _farmLocationMap();
+  if (loc) results = results.filter(s => (loc.map[s.shift_id] || '').includes(loc.farmAddr));
+
+  return results;
 }
 
 // Looks up today's signups for a person that have been checked in but not yet checked out.
@@ -905,13 +921,19 @@ async function getTodaySignupsForPerson(email, name) {
 async function getTodayCheckoutsForPerson(email, name) {
   const today   = todayPacific();
   const signups = await getAllSignups();
-  return signups.filter(s =>
+  let results = signups.filter(s =>
     s.email.toLowerCase() === email.toLowerCase().trim() &&
     s.name.toLowerCase()  === name.toLowerCase().trim()  &&
     s.shift_date === today &&
     s.attendance === 'Attended' &&
     !s.checkout_time
   );
+
+  // Same farm filter — checkouts should also be farm-only.
+  const loc = await _farmLocationMap();
+  if (loc) results = results.filter(s => (loc.map[s.shift_id] || '').includes(loc.farmAddr));
+
+  return results;
 }
 
 // Helper — finds the 1-indexed sheet row for a signup_id.
