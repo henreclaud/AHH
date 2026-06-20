@@ -551,7 +551,6 @@ async function getShifts() {
   const shifts = await getCachedShifts();
   const result = await _withCounts(shifts);
   return result
-    .filter(s => s.has_limit)                      // no limit label = not open for signup
     .filter(s => !s.staff_only)                    // { }-wrapped title = staff-only event
     .filter(s => !/^hide\b/i.test(s.title || '')) // HIDE- prefix = staff-only event
     .map(({ description_staff, staff_only, ...pub }) => pub);
