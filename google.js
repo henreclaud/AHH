@@ -8,7 +8,7 @@
 
 const crypto = require('crypto');
 const { google } = require('googleapis');
-const { sendUnregisteredAlert } = require('./mailer');
+const { sendUnregisteredAlert, sendConfirmationEmail } = require('./mailer');
 
 // ── Environment variables ────────────────────────────────────────────────────
 // GOOGLE_CALENDAR_ID          — the calendar to read shifts from
@@ -709,6 +709,16 @@ async function createSignup(shiftId, name, email) {
       ]],
     },
   });
+
+  // Confirmation email to the volunteer (fire-and-forget, non-fatal).
+  sendConfirmationEmail({
+    to:        email,
+    name,
+    shiftName: shift.title,
+    date:      shift.date,
+    time:      `${shift.start_time}–${shift.end_time}`,
+    location:  shift.location,
+  }).catch(err => console.warn('[confirm] confirmation email failed:', err.message));
 
   // Alert staff if the volunteer is not registered (fire-and-forget, non-fatal).
   if (registeredFlag === 'No') {

@@ -136,4 +136,39 @@ async function sendUnregisteredAlert({ name, email, shiftName, date, time }) {
   });
 }
 
-module.exports = { sendReminderEmail, sendUnregisteredAlert };
+/**
+ * Send a signup confirmation email to a volunteer.
+ *
+ * @param {object} opts
+ * @param {string} opts.to        Volunteer's email
+ * @param {string} opts.name      Volunteer's full name
+ * @param {string} opts.shiftName Shift title
+ * @param {string} opts.date      "YYYY-MM-DD"
+ * @param {string} opts.time      e.g. "9:00am–11:00am"
+ * @param {string} opts.location  Location string (may be empty)
+ */
+async function sendConfirmationEmail({ to, name, shiftName, date, time, location }) {
+  const d = new Date(date + 'T12:00:00Z');
+  const prettyDate = d.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+
+  const locationLine = location ? `\n📍 ${location}` : '';
+
+  const text = [
+    `Hi ${name},`,
+    '',
+    `You're signed up for ${shiftName} on ${prettyDate} at ${time}.${locationLine}`,
+    '',
+    'See you then!',
+    '— Animal Assisted Happiness',
+  ].join('\n');
+
+  await sendViaResend({
+    to,
+    subject: `You're signed up for ${shiftName}`,
+    text,
+  });
+}
+
+module.exports = { sendReminderEmail, sendUnregisteredAlert, sendConfirmationEmail };
