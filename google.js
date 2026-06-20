@@ -481,6 +481,26 @@ async function ensureHeaders() {
     });
     console.log('[sheets] "Notes" header added to column O');
   }
+
+  // Ensure shift_notes tab has a header row.
+  try {
+    const snRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range:         'shift_notes!A1',
+    });
+    const snA1 = ((snRes.data.values || [])[0] || [])[0] || '';
+    if (snA1.trim() !== 'Timestamp') {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId:    SHEET_ID,
+        range:            'shift_notes!A1',
+        valueInputOption: 'RAW',
+        requestBody:      { values: [['Timestamp', 'Date', 'Shift Name', 'Shift Time', 'Note']] },
+      });
+      console.log('[sheets] shift_notes header row written');
+    }
+  } catch {
+    // Tab doesn't exist yet — headers will be added when the first note is saved.
+  }
 }
 
 // Reads every signup row from the sheet and returns plain objects.
@@ -1208,11 +1228,17 @@ async function addShiftNote(date, shiftName, shiftTime, note) {
   try {
     await doAppend();
   } catch (err) {
-    // Tab doesn't exist yet — create it and retry once.
+    // Tab doesn't exist yet — create it with headers, then append the note.
     if (err.code === 400 || (err.message || '').includes('Unable to parse range')) {
       await sheets.spreadsheets.batchUpdate({
         spreadsheetId: SHEET_ID,
         requestBody:   { requests: [{ addSheet: { properties: { title: 'shift_notes' } } }] },
+      });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId:    SHEET_ID,
+        range:            'shift_notes!A1',
+        valueInputOption: 'RAW',
+        requestBody:      { values: [['Timestamp', 'Date', 'Shift Name', 'Shift Time', 'Note']] },
       });
       await doAppend();
     } else {
