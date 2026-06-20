@@ -130,7 +130,7 @@ async function sendUnregisteredAlert({ name, email, shiftName, date, time }) {
     `and is not a registered volunteer. Please review at ${staffUrl}`;
 
   await sendViaResend({
-    to:      process.env.ALERT_EMAIL || 'henry.p.kolb@gmail.com',
+    to:      process.env.ALERT_EMAIL || 'volunteercheck@aahsmilefarm.org',
     subject: 'Unregistered volunteer signup alert',
     text,
   });
