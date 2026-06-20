@@ -409,6 +409,26 @@ input:focus {
 }
 
 /* ---- Footer ---- */
+.privacy-card {
+  max-width: 680px;
+  margin: 48px auto;
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  padding: 36px 40px;
+}
+.privacy-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0 0 16px;
+}
+.privacy-card p {
+  color: var(--ink);
+  line-height: 1.7;
+  margin: 0;
+}
+
 .site-footer {
   margin-top: 30px;
   padding: 24px 0;
