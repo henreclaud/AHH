@@ -543,16 +543,18 @@ async function getUpcomingSignupsByEmail(email) {
 // Shared helper — adds live spot counts to a list of cached shifts.
 // Youth Ambassadors (registered === 'YA') don't count toward the spot limit.
 async function _withCounts(shifts) {
-  const signups = await getAllSignups();
-  const counts  = {};  // non-YA signups only
+  const signups  = await getAllSignups();
+  const counts   = {};  // non-YA signups only
   for (const s of signups) {
     if (s.registered === 'YA') continue;
     counts[s.shift_id] = (counts[s.shift_id] || 0) + 1;
   }
+  const farmAddr = (process.env.FARM_ADDRESS || '').trim().toLowerCase();
   return shifts.map(shift => {
     const taken      = counts[shift.id] || 0;
     const spots_left = Math.max(0, shift.capacity - taken);
-    return { ...shift, taken, spots_left, is_full: spots_left <= 0 };
+    const is_farm    = farmAddr ? (shift.location || '').toLowerCase().includes(farmAddr) : false;
+    return { ...shift, taken, spots_left, is_full: spots_left <= 0, is_farm };
   });
 }
 
@@ -596,10 +598,12 @@ async function getAdminShifts() {
     });
   }
 
+  const farmAddr = (process.env.FARM_ADDRESS || '').trim().toLowerCase();
   return shifts.map(shift => {
     const shiftSignups = byShift[shift.id] || [];
     const spots_left   = Math.max(0, shift.capacity - shiftSignups.length);
-    return { ...shift, spots_left, is_full: spots_left <= 0, signups: shiftSignups };
+    const is_farm      = farmAddr ? (shift.location || '').toLowerCase().includes(farmAddr) : false;
+    return { ...shift, spots_left, is_full: spots_left <= 0, signups: shiftSignups, is_farm };
   });
 }
 

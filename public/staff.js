@@ -359,8 +359,8 @@ function createCard(shift) {
   }
   card.appendChild(btn);
 
-  // Add report button (only when there are signups to mark)
-  if (shift.signups && shift.signups.length > 0) {
+  // Add report button — only for non-farm shifts (farm uses QR check-in instead)
+  if (!shift.is_farm && shift.signups && shift.signups.length > 0) {
     const reportBtn = document.createElement('button');
     reportBtn.type = 'button';
     reportBtn.className = 'btn btn-secondary scard-btn';
