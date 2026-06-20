@@ -297,6 +297,9 @@ signupForm.addEventListener('submit', async e => {
     return;
   }
 
+  const submitBtn = signupForm.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+
   try {
     const res  = await fetch(`/api/shifts/${selectedShiftId}/signup`, {
       method: 'POST',
@@ -304,12 +307,17 @@ signupForm.addEventListener('submit', async e => {
       body: JSON.stringify({ name, email }),
     });
     const data = await res.json();
-    if (!res.ok) { formError.textContent = data.error || 'Something went wrong.'; return; }
+    if (!res.ok) {
+      formError.textContent = data.error || 'Something went wrong.';
+      submitBtn.disabled = false;
+      return;
+    }
     dialog.close();
     await loadShifts();
     alert(data.message);
   } catch {
     formError.textContent = 'Sorry, something went wrong. Please try again.';
+    submitBtn.disabled = false;
   }
 });
 
