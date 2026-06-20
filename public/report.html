@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Attendance Report · Animal Assisted Happiness</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="index.html">
+          <img class="brand-logo" src="images/aah-heart.png" alt="Animal Assisted Happiness logo" />
+          <span class="brand-text">Animal Assisted Happiness</span>
+        </a>
+        <div class="header-links">
+          <a class="link" href="staff.html">Staff</a>
+          <a class="link" href="admin.html">Admin</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Auth gate -->
+    <div id="auth-gate" class="auth-gate-wrap">
+      <div class="auth-gate card">
+        <div class="auth-gate-icon">🔒</div>
+        <h2 class="auth-gate-title">Staff access</h2>
+        <p class="auth-gate-sub">Enter the staff password to continue.</p>
+        <form id="login-form" class="auth-gate-form" novalidate>
+          <label class="auth-gate-label" for="staff-password">Password</label>
+          <input type="password" id="staff-password" name="staff-password"
+                 class="auth-gate-input" autocomplete="current-password" required />
+          <p id="login-error" class="form-error"></p>
+          <button type="submit" class="btn btn-primary btn-full auth-gate-btn">Sign in</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Report content -->
+    <div id="report-main" hidden>
+      <section class="masthead">
+        <div class="container masthead-inner">
+          <div class="masthead-copy">
+            <h1 class="masthead-title">Attendance Report</h1>
+            <p class="masthead-sub">Mark who showed up and add notes about each shift.</p>
+          </div>
+        </div>
+      </section>
+
+      <main class="container">
+        <div class="report-controls">
+          <label class="report-date-label" for="report-date">Date</label>
+          <input type="date" id="report-date" class="report-date-input" />
+          <button id="load-btn" class="btn btn-primary">Load</button>
+        </div>
+        <div id="report-content">
+          <p id="report-status" class="status"></p>
+        </div>
+      </main>
+
+      <footer class="site-footer">
+        <div class="container">
+          Made with love for the animals and the people they visit.
+          · <a class="cancel-link" href="privacy.html">Privacy Policy</a>
+        </div>
+      </footer>
+    </div>
+
+    <script src="report.js"></script>
+  </body>
+</html>
