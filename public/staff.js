@@ -445,6 +445,7 @@ function openSignup(shift) {
   dialogTitle.textContent = shift.title;
   formError.textContent = '';
   signupForm.reset();
+  signupForm.querySelector('button[type="submit"]').disabled = false;
   dialog.showModal();
 }
 
