@@ -480,7 +480,7 @@ signupForm.addEventListener('submit', async e => {
 // ── Report dialog ─────────────────────────────────────────────────────────────
 let _reportShift = null;
 
-function openReport(shift) {
+async function openReport(shift) {
   _reportShift = shift;
   reportDialogTitle.textContent = shift.title;
   reportDialogSub.textContent   = `${formatDate(shift.date)} · ${shift.start_time}–${shift.end_time}`;
@@ -488,6 +488,18 @@ function openReport(shift) {
   noteStatus.textContent        = '';
   buildReportList(shift);
   reportDialog.showModal();
+
+  // Pre-populate notes textarea with the most recently saved note for this shift.
+  try {
+    const res = await fetch(
+      `/api/staff/report/notes?date=${encodeURIComponent(shift.date)}&shiftName=${encodeURIComponent(shift.title)}`,
+      { headers: { 'Authorization': `Bearer ${sessionToken}` } },
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data.note) reportDialogNotes.value = data.note;
+    }
+  } catch { /* non-critical */ }
 }
 
 function buildReportList(shift) {

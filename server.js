@@ -29,6 +29,7 @@ const {
   getSignupsForReportDate,
   markAttendanceReport,
   addShiftNote,
+  getShiftNotes,
 } = require('./google');
 
 const app  = express();
@@ -289,6 +290,19 @@ app.post('/api/staff/report/attendance', requireStaff, async (req, res) => {
   } catch (err) {
     console.error('[POST /api/staff/report/attendance]', err.message);
     res.status(500).json({ error: 'Could not save attendance.' });
+  }
+});
+
+// GET /api/staff/report/notes?date=YYYY-MM-DD&shiftName=...
+app.get('/api/staff/report/notes', requireStaff, async (req, res) => {
+  const { date, shiftName } = req.query;
+  if (!date || !shiftName) return res.status(400).json({ error: 'date and shiftName are required.' });
+  try {
+    const note = await getShiftNotes(date, shiftName.trim());
+    res.json({ note: note || '' });
+  } catch (err) {
+    console.error('[GET /api/staff/report/notes]', err.message);
+    res.status(500).json({ error: 'Could not load notes.' });
   }
 });
 

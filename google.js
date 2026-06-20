@@ -1143,6 +1143,25 @@ async function markAttendanceReport(signupId, status, notes) {
   return { ok: true, hours };
 }
 
+// Returns the most recent note for a given shift date + name from the shift_notes tab.
+async function getShiftNotes(date, shiftName) {
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+  try {
+    const res  = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range:         'shift_notes!A:E',
+    });
+    const rows     = res.data.values || [];
+    const matching = rows.filter(r => r[1] === date && r[2] === shiftName);
+    if (!matching.length) return null;
+    return matching[matching.length - 1][4] || null;
+  } catch (err) {
+    if (err.code === 400 || (err.message || '').includes('Unable to parse range')) return null;
+    throw err;
+  }
+}
+
 // Appends a shift-level note to the 'shift_notes' tab.
 // Auto-creates the tab on first use if it doesn't exist.
 async function addShiftNote(date, shiftName, shiftTime, note) {
@@ -1177,4 +1196,4 @@ async function addShiftNote(date, shiftName, shiftTime, note) {
   return { ok: true };
 }
 
-module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, getSignupsForReportDate, markAttendanceReport, addShiftNote };
+module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, getSignupsForReportDate, markAttendanceReport, addShiftNote, getShiftNotes };
