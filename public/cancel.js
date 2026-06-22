@@ -92,8 +92,8 @@ function buildList(signups) {
     const info = document.createElement('div');
     info.className = 'cancel-signup-info';
     info.innerHTML = `
-      <p class="cancel-signup-name">${escapeHtml(signup.shift_name)}</p>
-      <p class="cancel-signup-when">${escapeHtml(formatDate(signup.shift_date))} · ${escapeHtml(signup.shift_time)}</p>
+      <p class="cancel-signup-name">${escapeHtml(signup.name)}</p>
+      <p class="cancel-signup-when">${escapeHtml(signup.shift_name)} on ${escapeHtml(formatDate(signup.shift_date))} at ${escapeHtml(signup.shift_time)}</p>
     `;
 
     const btn = document.createElement('button');
@@ -114,7 +114,7 @@ let pendingSignup = null;
 function askConfirm(signup, triggerBtn) {
   pendingSignup = signup;
   confirmMsg.textContent =
-    `Are you sure you want to cancel your signup for ${signup.shift_name} on ${formatDate(signup.shift_date)} at ${signup.shift_time}?`;
+    `Are you sure you want to cancel ${signup.name}'s signup for ${signup.shift_name} on ${formatDate(signup.shift_date)} at ${signup.shift_time}?`;
   dialog.showModal();
 }
 
@@ -149,7 +149,7 @@ confirmYes.addEventListener('click', async () => {
       listError.hidden = false;
     } else {
       doneMsg.textContent =
-        `Your signup for ${signup.shift_name} on ${formatDate(signup.shift_date)} has been cancelled.`;
+        `${signup.name}'s signup for ${signup.shift_name} on ${formatDate(signup.shift_date)} has been cancelled.`;
       showStep('done');
     }
   } catch {

@@ -552,6 +552,7 @@ async function getUpcomingSignupsByEmail(email) {
     )
     .map(s => ({
       signup_id:  s.signup_id,
+      name:       s.name,
       shift_name: s.shift_name,
       shift_date: s.shift_date,
       shift_time: s.shift_time,
