@@ -746,7 +746,7 @@ async function createSignup(shiftId, name, email) {
         shift.id,
         shift.title,
         shift.date,
-        `${shift.start_time}–${shift.end_time}`,
+        `${shift.start_time}-${shift.end_time}`,
         signupId,       // col H — Signup ID
         '',             // col I — Reminded (managed by send-reminders.js)
         isYA ? 'YA' : registeredFlag, // col J — 'YA', 'Yes', 'No', or '' if lookup failed
@@ -762,7 +762,7 @@ async function createSignup(shiftId, name, email) {
       name, email,
       shiftName: shift.title,
       date:      shift.date,
-      time:      `${shift.start_time}–${shift.end_time}`,
+      time:      `${shift.start_time}-${shift.end_time}`,
     }).catch(err => console.warn('[alert] unregistered alert failed:', err.message));
   }
 
@@ -879,7 +879,7 @@ function timeToMinutes(str) {
 const CHECKIN_BUFFER_MINS = 30;
 
 function isCheckinWindowOpen(shiftTimeStr) {
-  const [startStr, endStr] = (shiftTimeStr || '').split('–');
+  const [startStr, endStr] = (shiftTimeStr || '').split(/[-–—]/);
   const startMins = timeToMinutes(startStr);
   const endMins   = timeToMinutes(endStr);
   if (startMins === null || endMins === null) return true; // can't parse → allow
@@ -1112,7 +1112,7 @@ async function getPasswords() {
 
 // Calculates decimal hours from a shift time string like "9:00am–11:00am".
 function calcHoursFromTimeRange(timeStr) {
-  const parts = (timeStr || '').split('–');
+  const parts = (timeStr || '').split(/[-–—]/);
   if (parts.length < 2) return null;
   const start = timeToMinutes(parts[0].trim());
   const end   = timeToMinutes(parts[1].trim());
@@ -1143,8 +1143,8 @@ async function getSignupsForReportDate(date) {
   }
 
   return [...map.values()].sort((a, b) => {
-    const aM = timeToMinutes((a.shift_time || '').split('–')[0].trim()) ?? 0;
-    const bM = timeToMinutes((b.shift_time || '').split('–')[0].trim()) ?? 0;
+    const aM = timeToMinutes((a.shift_time || '').split(/[-–—]/)[0].trim()) ?? 0;
+    const bM = timeToMinutes((b.shift_time || '').split(/[-–—]/)[0].trim()) ?? 0;
     return aM - bM;
   });
 }
@@ -1205,6 +1205,8 @@ async function getShiftNotes(date, shiftName) {
 // Auto-creates the tab on first use if it doesn't exist.
 async function addShiftNote(date, shiftName, shiftTime, note) {
   if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
+  // Normalise any en/em dash in the time range to a plain hyphen before writing.
+  shiftTime = String(shiftTime || '').replace(/[–—]/g, '-');
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
 
   async function doAppend() {
