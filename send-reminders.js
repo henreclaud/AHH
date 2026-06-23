@@ -3,7 +3,7 @@
 //
 // What it does:
 //   1. Reads all signup rows from the Google Sheet
-//   2. For each row whose shift starts 23–25 hours from now, sends a reminder email
+//   2. For each row whose shift starts within ~26 hours (and isn't already reminded), sends a reminder email
 //   3. Marks each reminded row with "Yes" in column H ("Reminded") to prevent duplicates
 //   4. Exits when done
 //
@@ -29,9 +29,12 @@ const CANCEL_URL = `${APP_URL}/cancel.html`;
 const COL = { NAME: 1, EMAIL: 2, SHIFT_NAME: 4, DATE: 5, TIME: 6, REMINDED: 8 };
 const SHEET_RANGE = 'signups!A:I';
 
-// The reminder window: send when the shift is between 23 and 25 hours away.
-const WINDOW_MIN_MS = 23 * 60 * 60 * 1000;  // send when shift is 23–25 hours away
-const WINDOW_MAX_MS = 25 * 60 * 60 * 1000;
+// Reminder window: send when the shift is roughly a day away. The window is wide
+// (1–26 h) on purpose — GitHub Actions runs the hourly cron irregularly (often
+// multi-hour gaps), so a narrow window would skip people entirely. The
+// "Reminded = Yes" guard below still ensures each person is emailed only once.
+const WINDOW_MIN_MS = 1  * 60 * 60 * 1000;  // stop reminding once the shift is <1h away
+const WINDOW_MAX_MS = 26 * 60 * 60 * 1000;  // start reminding up to ~26h before
 
 // ── Google Auth ───────────────────────────────────────────────────────────────
 

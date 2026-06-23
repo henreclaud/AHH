@@ -71,12 +71,12 @@ async function sendReminderEmail({ to, name, shiftName, date, time, location, ca
 
   const locationLine = location ? `located at ${location}` : 'at Smile Farm';
 
-  const subject = 'Reminder: Your AAH volunteer shift tomorrow';
+  const subject = 'Reminder: Your upcoming AAH volunteer shift';
 
   const text = [
     `Hi ${name},`,
     '',
-    `This is a reminder that you're signed up for ${shiftName} tomorrow, ${prettyDate} at ${time}, ${locationLine}.`,
+    `This is a reminder that you're signed up for ${shiftName} on ${prettyDate} at ${time}, ${locationLine}.`,
     '',
     'We look forward to seeing you!',
     '',
@@ -88,7 +88,7 @@ async function sendReminderEmail({ to, name, shiftName, date, time, location, ca
   const html = `
 <p>Hi ${name},</p>
 <p>
-  This is a reminder that you're signed up for <strong>${shiftName}</strong> tomorrow,
+  This is a reminder that you're signed up for <strong>${shiftName}</strong> on
   <strong>${prettyDate} at ${time}</strong>, ${locationLine}.
 </p>
 <p>We look forward to seeing you!</p>
