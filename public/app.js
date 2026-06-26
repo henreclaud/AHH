@@ -66,7 +66,9 @@ function getVisible() {
         }
       }
       // Activity type
-      if (filters.type !== 'all' && (s.category || 'Visit') !== filters.type) return false;
+      if (filters.type === '__other__') {
+        if (MAIN_FILTER_TYPES.includes(s.category || 'Visit')) return false;
+      } else if (filters.type !== 'all' && (s.category || 'Visit') !== filters.type) return false;
       // Openings only — shifts with no limit always pass; limited shifts must have spots left
       if (filters.openingsOnly && s.has_limit && s.is_full) return false;
       return true;
@@ -230,8 +232,16 @@ function buildTypeChips() {
     if (counts.has(t)) typeRow.appendChild(makeChip(t, t, counts.get(t)));
   });
 
+  // "All Others" — everything not in the five main types.
+  const otherCount = allShifts.filter(s => !MAIN_FILTER_TYPES.includes(s.category || 'Visit')).length;
+  if (otherCount > 0) typeRow.appendChild(makeChip('__other__', 'All Others', otherCount));
+
   // Openings toggle flows at the end of the chip row.
-  if (openingsBtn) typeRow.appendChild(openingsBtn);
+  if (openingsBtn) {
+    const openCount = allShifts.filter(s => !(s.has_limit && s.is_full)).length;
+    openingsBtn.innerHTML = `Open Opportunities<span class="chip-count">${openCount}</span>`;
+    typeRow.appendChild(openingsBtn);
+  }
 }
 
 function makeChip(value, label, count) {
