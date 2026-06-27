@@ -1878,6 +1878,7 @@ input:focus {
 }
 .cal-activity { font-weight: 700; font-size: 1rem; }
 .cal-time { color: var(--muted, #6b7280); font-size: 0.95rem; white-space: nowrap; }
+.cal-location { color: var(--muted, #6b7280); font-size: 0.875rem; font-style: italic; margin-left: auto; }
 
 @media (max-width: 560px) {
   .cal-row { flex-direction: column; align-items: flex-start; gap: 4px; }

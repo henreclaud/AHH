@@ -101,6 +101,13 @@ function render(shifts) {
 
       row.appendChild(activity);
       row.appendChild(time);
+
+      if (s.location) {
+        const loc = document.createElement('span');
+        loc.className   = 'cal-location';
+        loc.textContent = s.location;
+        row.appendChild(loc);
+      }
       group.appendChild(row);
     }
     calendarEl.appendChild(group);
