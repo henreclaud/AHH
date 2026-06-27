@@ -188,18 +188,16 @@ function createCard(shift) {
   }
 
   // Sign-up button — only for events with a volunteer limit
-  if (shift.has_limit) {
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-primary scard-btn';
-    if (shift.is_full) {
-      btn.textContent = 'Full';
-      btn.disabled = true;
-    } else {
-      btn.textContent = 'Sign up';
-      btn.addEventListener('click', () => openSignup(shift));
-    }
-    card.appendChild(btn);
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-primary scard-btn';
+  if (shift.has_limit && shift.is_full) {
+    btn.textContent = 'Full';
+    btn.disabled = true;
+  } else {
+    btn.textContent = 'Sign up';
+    btn.addEventListener('click', () => openSignup(shift));
   }
+  card.appendChild(btn);
 
   return card;
 }
