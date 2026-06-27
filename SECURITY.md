@@ -23,11 +23,13 @@ that still need a human decision.
 
 ## Manual actions still required (cannot be done in code)
 
-1. **Rotate the leaked GitHub token.** A personal access token was previously
-   embedded in the git remote URL. It has been removed from the remote, but the
-   leaked value must be **revoked** at <https://github.com/settings/tokens> and
-   replaced. After rotating, run `git push` once from a terminal — git will
-   prompt for the new token and store it in the macOS keychain.
+1. **(Optional) Rotate the GitHub token.** A personal access token used to be
+   stored in plaintext in the git remote URL (`.git/config`). It was **never
+   committed and never appears in git history** — `.git/config` is local-only,
+   so it was not publicly exposed. It has since been moved out of the remote URL
+   and into the macOS keychain (via a one-time `git push`). Revoking the old
+   token at <https://github.com/settings/tokens> is good hygiene but only
+   necessary if this machine itself was ever compromised.
 
 2. **Strengthen the app passwords.** They live in the `pwd` tab of the Google
    Sheet. The current values are short (e.g. a 3-character admin password). Even
