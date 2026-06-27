@@ -1857,3 +1857,28 @@ input:focus {
   .cancel-confirm-btns { flex-direction: column; }
   .cancel-confirm-btns .btn { width: 100%; }
 }
+
+/* ── Read-only Calendar page ─────────────────────────────────────────────── */
+.cal-group { margin-bottom: 28px; }
+.cal-date {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--brand, #6b4ef0);
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--border, #ece9f8);
+}
+.cal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  margin-bottom: 10px;
+}
+.cal-activity { font-weight: 700; font-size: 1rem; }
+.cal-time { color: var(--muted, #6b7280); font-size: 0.95rem; white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .cal-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+}

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Calendar · Animal Assisted Happiness</title>
+    <link rel="icon" href="images/aah-heart.png" />
+    <link rel="apple-touch-icon" href="images/aah-heart.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="volunteer">
+    <!-- Header with the real AAH rainbow logo -->
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="index.html">
+          <img class="brand-logo" src="images/aah-heart.png" alt="Animal Assisted Happiness logo" />
+          <span class="brand-text">Animal Assisted Happiness</span>
+        </a>
+        <div class="header-links">
+          <a class="link" href="index.html">Volunteer</a>
+          <a class="link" href="calendar.html">Calendar</a>
+          <a class="link" href="staff.html">Staff</a>
+          <a class="link" href="admin.html">Admin</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Page header -->
+    <section class="masthead">
+      <div class="container masthead-inner">
+        <div class="masthead-copy">
+          <h1 class="masthead-title">Calendar</h1>
+          <p class="masthead-sub">
+            A read-only look at upcoming shifts. To claim a spot, head back to
+            <a href="index.html">Volunteer Opportunities</a>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <main class="container">
+      <div id="calendar"></div>
+      <p id="cal-status" class="status">Loading…</p>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        Experience the smiles only animals can bring.
+        · <a class="cancel-link" href="privacy.html">Privacy Policy</a>
+      </div>
+    </footer>
+
+    <script src="calendar.js"></script>
+  </body>
+</html>
