@@ -376,7 +376,9 @@ const SHEET_HEADERS = [
 function generateSignupId() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let id = '';
-  for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  // crypto.randomInt is a CSPRNG — unlike Math.random(), the IDs can't be
+  // predicted, so they can't be guessed to cancel someone else's signup.
+  for (let i = 0; i < 6; i++) id += chars[crypto.randomInt(chars.length)];
   return id;
 }
 

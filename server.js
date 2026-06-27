@@ -3,10 +3,12 @@
 
 'use strict';
 
-const express = require('express');
-const path    = require('path');
-const crypto  = require('crypto');
-const cron    = require('node-cron');
+const express   = require('express');
+const path      = require('path');
+const crypto    = require('crypto');
+const cron      = require('node-cron');
+const helmet    = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 // Load .env file when running locally.
 // On Render the real environment variables are set in the dashboard.
@@ -35,8 +37,37 @@ const {
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+// Render terminates TLS at its proxy, so the real client IP arrives in
+// X-Forwarded-For. Trust one proxy hop so rate limiting keys on the real IP.
+app.set('trust proxy', 1);
+
+// Security headers. CSP is left off because the pages use inline style
+// attributes and would otherwise break; the other protections (no MIME
+// sniffing, no framing/clickjacking, referrer policy, HSTS) all apply.
+app.use(helmet({ contentSecurityPolicy: false }));
+
+app.use(express.json({ limit: '64kb' }));
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
+
+// ── Rate limiters ───────────────────────────────────────────────────────────
+// Login: blunt the password brute-force. 10 tries / 15 min / IP.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Please wait a few minutes and try again.' },
+});
+
+// Public write/lookup endpoints (signup, cancel, lookup-by-email, check-in/out):
+// stop signup-ID guessing and PII enumeration. 30 requests / min / IP.
+const publicApiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please slow down and try again shortly.' },
+});
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 // Token-based auth for Admin and Staff pages.
@@ -58,6 +89,15 @@ function makeRequireRole(tokenSet) {
 const requireAdmin = makeRequireRole(adminTokens);
 const requireStaff = makeRequireRole(staffTokens);
 
+// Length-safe constant-time string comparison — avoids leaking the password
+// via response timing. Returns false for any length mismatch.
+function constantTimeEquals(a, b) {
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 // Shared login helper — looks up the password for `role` in the sheet and
 // issues a token if it matches.
 async function handleLogin(role, tokenSet, supplied, res) {
@@ -76,7 +116,7 @@ async function handleLogin(role, tokenSet, supplied, res) {
     console.warn(`[auth] No ${role} password set in the pwd tab.`);
     return res.status(503).json({ error: `${role.charAt(0).toUpperCase() + role.slice(1)} access is not configured. Add the password to the pwd tab on the sheet.` });
   }
-  if (supplied !== expected) {
+  if (!constantTimeEquals(supplied, expected)) {
     console.log(`[auth] Failed ${role} login`);
     return res.status(401).json({ error: 'Incorrect password. Try again.' });
   }
@@ -87,12 +127,12 @@ async function handleLogin(role, tokenSet, supplied, res) {
 }
 
 // POST /api/admin/login — body: { password }
-app.post('/api/admin/login', async (req, res) => {
+app.post('/api/admin/login', loginLimiter, async (req, res) => {
   await handleLogin('admin', adminTokens, (req.body.password || '').trim(), res);
 });
 
 // POST /api/staff/login — body: { password }
-app.post('/api/staff/login', async (req, res) => {
+app.post('/api/staff/login', loginLimiter, async (req, res) => {
   await handleLogin('staff', staffTokens, (req.body.password || '').trim(), res);
 });
 
@@ -118,7 +158,7 @@ app.get('/api/shifts', async (req, res) => {
 // POST /api/shifts/:id/signup
 // Signs a volunteer up for a shift. Body: { name, email }.
 // :id is the Google Calendar event ID.
-app.post('/api/shifts/:id/signup', async (req, res) => {
+app.post('/api/shifts/:id/signup', publicApiLimiter, async (req, res) => {
   const name  = (req.body.name  || '').trim();
   const email = (req.body.email || '').trim().toLowerCase();
 
@@ -144,7 +184,7 @@ app.post('/api/shifts/:id/signup', async (req, res) => {
 
 // GET /api/signups?email=
 // Returns all upcoming signups for the given email (for the cancel page).
-app.get('/api/signups', async (req, res) => {
+app.get('/api/signups', publicApiLimiter, async (req, res) => {
   const email = (req.query.email || '').trim();
   if (!email || !isValidEmail(email)) {
     return res.status(400).json({ error: 'Please enter a valid email address.' });
@@ -159,7 +199,7 @@ app.get('/api/signups', async (req, res) => {
 
 // POST /api/signups/cancel
 // Cancels a signup by ID. Body: { signupId }.
-app.post('/api/signups/cancel', async (req, res) => {
+app.post('/api/signups/cancel', publicApiLimiter, async (req, res) => {
   const signupId = (req.body.signupId || '').trim();
 
   if (!signupId) {
@@ -204,7 +244,7 @@ app.get('/api/admin/shifts', requireAdmin, async (req, res) => {
 
 // GET /api/checkin?email=&name=
 // Returns today's active-window signups for the given person (email + name).
-app.get('/api/checkin', async (req, res) => {
+app.get('/api/checkin', publicApiLimiter, async (req, res) => {
   const email = (req.query.email || '').trim();
   const name  = (req.query.name  || '').trim();
   if (!email || !name) return res.status(400).json({ error: 'Email and name are required.' });
@@ -218,7 +258,7 @@ app.get('/api/checkin', async (req, res) => {
 
 // POST /api/checkin  body: { signupId }
 // Marks a signup as Attended and records the check-in time.
-app.post('/api/checkin', async (req, res) => {
+app.post('/api/checkin', publicApiLimiter, async (req, res) => {
   const signupId = (req.body.signupId || '').trim().toUpperCase();
   if (!signupId) return res.status(400).json({ error: 'signupId is required.' });
   try {
@@ -233,7 +273,7 @@ app.post('/api/checkin', async (req, res) => {
 
 // GET /api/checkout?email=&name=
 // Returns today's checked-in (but not yet checked-out) signups for this person.
-app.get('/api/checkout', async (req, res) => {
+app.get('/api/checkout', publicApiLimiter, async (req, res) => {
   const email = (req.query.email || '').trim();
   const name  = (req.query.name  || '').trim();
   if (!email || !name) return res.status(400).json({ error: 'Email and name are required.' });
@@ -247,7 +287,7 @@ app.get('/api/checkout', async (req, res) => {
 
 // POST /api/checkout  body: { signupId }
 // Records check-out time and computes hours worked.
-app.post('/api/checkout', async (req, res) => {
+app.post('/api/checkout', publicApiLimiter, async (req, res) => {
   const signupId = (req.body.signupId || '').trim().toUpperCase();
   if (!signupId) return res.status(400).json({ error: 'signupId is required.' });
   try {
