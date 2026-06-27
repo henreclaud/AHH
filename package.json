@@ -4,7 +4,8 @@
   "description": "AAH volunteer shift signup app — Google Calendar + Sheets backend.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test test/*.test.js && playwright test"
   },
   "engines": {
     "node": ">=18"

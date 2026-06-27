@@ -16,6 +16,12 @@ that still need a human decision.
   `style=` attributes; turning CSP on would require removing those first.
 - **Unguessable signup IDs**: generated with `crypto.randomInt` (CSPRNG),
   not `Math.random`. Prevents guessing an ID to cancel someone else's signup.
+- **Spreadsheet formula-injection guard** (`sanitizeForSheet` in google.js):
+  user-supplied text written to the sheet with `USER_ENTERED` (signup name/email,
+  shift notes) is prefixed with `'` when it starts with `= + - @`, so a name like
+  `=HYPERLINK(...)` can't run as a formula in staff's account. Covered by
+  `test/sheet-injection.test.js`. (Other write paths already use `RAW`, which is
+  injection-safe.)
 - **Constant-time password comparison** (`crypto.timingSafeEqual`).
 - **Auth tokens**: 32-byte random hex, in-memory, expire on every deploy.
 - **Body size cap**: JSON limited to 64 kb.

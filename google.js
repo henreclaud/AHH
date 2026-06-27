@@ -382,6 +382,17 @@ function generateSignupId() {
   return id;
 }
 
+// Neutralizes spreadsheet formula / CSV injection. With the USER_ENTERED write
+// mode, Google Sheets treats a cell that begins with = + - @ (or tab/CR) as a
+// live formula — so a volunteer signing up as `=HYPERLINK("http://evil","x")`
+// would run code in staff's account when they open the sheet. Prefixing a
+// single quote forces the cell to plain text; the quote is consumed by Sheets
+// (not stored or displayed), so values still read back cleanly via the API.
+function sanitizeForSheet(value) {
+  const s = String(value ?? '');
+  return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+}
+
 // Writes the header row if the sheet is empty, and ensures column headers for
 // Signup ID (H) and Registered (J) exist.  Safe to call every startup.
 async function ensureHeaders() {
@@ -743,10 +754,10 @@ async function createSignup(shiftId, name, email) {
     requestBody: {
       values: [[
         new Date().toISOString(),
-        name,
-        email,
+        sanitizeForSheet(name),
+        sanitizeForSheet(email),
         shift.id,
-        shift.title,
+        sanitizeForSheet(shift.title),
         shift.date,
         `${shift.start_time}-${shift.end_time}`,
         signupId,       // col H — Signup ID
@@ -1217,7 +1228,7 @@ async function addShiftNote(date, shiftName, shiftTime, note) {
       range:            'shift_notes!A1',
       valueInputOption: 'USER_ENTERED',
       requestBody: {
-        values: [[new Date().toISOString(), date, shiftName, shiftTime, note]],
+        values: [[new Date().toISOString(), date, sanitizeForSheet(shiftName), shiftTime, sanitizeForSheet(note)]],
       },
     });
   }
@@ -1245,4 +1256,4 @@ async function addShiftNote(date, shiftName, shiftTime, note) {
   return { ok: true };
 }
 
-module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, getSignupsForReportDate, markAttendanceReport, addShiftNote, getShiftNotes };
+module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, getSignupsForReportDate, markAttendanceReport, addShiftNote, getShiftNotes, sanitizeForSheet };
