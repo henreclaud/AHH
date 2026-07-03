@@ -566,6 +566,25 @@ async function getUpcomingSignupsByEmail(email) {
   const today   = todayPacific();
   const signups = await getAllSignups();
   const norm    = (email || '').trim().toLowerCase();
+
+  // Staff contact per shift — intersect the calendar event's guest list with
+  // the staff tab, so volunteers can email whoever is running their visit.
+  // Only emails that appear in the staff tab are ever exposed here.
+  // Non-fatal: if this lookup fails the signups still come back, just without contacts.
+  const shiftStaff = {};
+  try {
+    const [shifts, staff] = await Promise.all([getCachedShifts(), getStaffList()]);
+    const nameByEmail = new Map(staff.filter(p => p.email).map(p => [p.email, p.name]));
+    for (const shift of shifts) {
+      const contacts = (shift.attendees || [])
+        .filter(a => nameByEmail.has(a.email))
+        .map(a => ({ name: nameByEmail.get(a.email), email: a.email }));
+      if (contacts.length) shiftStaff[shift.id] = contacts;
+    }
+  } catch (err) {
+    console.warn('[signups] staff contact lookup failed:', err.message);
+  }
+
   return signups
     .filter(s =>
       s.email.toLowerCase() === norm &&
@@ -579,6 +598,7 @@ async function getUpcomingSignupsByEmail(email) {
       shift_name: s.shift_name,
       shift_date: s.shift_date,
       shift_time: s.shift_time,
+      staff_contacts: shiftStaff[s.shift_id] || [],
     }));
 }
 

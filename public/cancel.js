@@ -96,6 +96,21 @@ function buildList(signups) {
       <p class="cancel-signup-when">${escapeHtml(signup.shift_name)} on ${escapeHtml(formatDate(signup.shift_date))} at ${escapeHtml(signup.shift_time)}</p>
     `;
 
+    // Email-the-staff button — opens a pre-addressed email to whoever is
+    // running this visit (from the calendar guest list), so volunteers can
+    // report a change or delay. Mirrors the staff page's "Notify volunteers".
+    const contacts = signup.staff_contacts || [];
+    if (contacts.length) {
+      const emails  = contacts.map(c => c.email).join(',');
+      const names   = contacts.map(c => c.name.split(/\s+/)[0]).join(' & ');
+      const subject = `Change/delay for my signup: ${signup.shift_name} on ${formatDate(signup.shift_date)}`;
+      const mail = document.createElement('a');
+      mail.className   = 'btn btn-secondary cancel-notify-btn';
+      mail.href        = `mailto:${emails}?subject=${encodeURIComponent(subject)}`;
+      mail.textContent = `✉️ Email ${names} about a change or delay`;
+      info.appendChild(mail);
+    }
+
     const btn = document.createElement('button');
     btn.className   = 'btn btn-danger cancel-signup-btn';
     btn.textContent = 'Cancel';

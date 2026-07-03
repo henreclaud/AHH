@@ -669,6 +669,14 @@ input:focus {
   margin: 0;
 }
 
+.cancel-notify-btn {
+  margin-top: 10px;
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  display: inline-block;
+  text-decoration: none;
+}
+
 .cancel-signup-btn {
   flex-shrink: 0;
   white-space: nowrap;
