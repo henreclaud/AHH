@@ -1386,6 +1386,15 @@ input:focus {
   flex-wrap: wrap;
   flex: 1;
 }
+
+/* Staff page: many name chips — stack the bar so chips get the full width
+   instead of wrapping in the leftover space beside the date buttons. */
+.staff-page .filter-bar-inner {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.staff-page .chip-row { flex: none; }
 .chip {
   display: inline-flex;
   align-items: center;

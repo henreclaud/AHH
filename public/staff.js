@@ -111,7 +111,6 @@ const formError       = document.getElementById('form-error');
 const cancelButton    = document.getElementById('cancel-button');
 const dateGroup       = document.getElementById('filter-date');
 const typeRow         = document.getElementById('filter-type');
-const openingsToggle  = document.getElementById('filter-openings');
 const resultsCount    = document.getElementById('results-count');
 const clearButton     = document.getElementById('clear-filters');
 const statNumber      = document.getElementById('stat-number');
@@ -131,7 +130,7 @@ let staffList = [];   // [{ name, email }] from the staff tab on the Sheet
 let selectedShiftId = null;
 // filters.type: 'all' or a staff member's email — shifts are matched by the
 // calendar event's guest list, not the title (titles can name several people).
-const filters = { dateRange: 'all', type: 'all', openingsOnly: false };
+const filters = { dateRange: 'all', type: 'all' };
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 async function loadShifts() {
@@ -181,7 +180,6 @@ function getVisible() {
         }
       }
       if (filters.type !== 'all' && !isAssignedTo(s, filters.type)) return false;
-      if (filters.openingsOnly && s.has_limit && s.is_full) return false;
       return true;
     })
     .sort(compareDateTime);
@@ -205,8 +203,7 @@ function render() {
   resultsCount.textContent = total
     ? `Showing ${visible.length} of ${total} visit${total === 1 ? '' : 's'}`
     : '';
-  openingsToggle.classList.toggle('active', filters.openingsOnly);
-  clearButton.hidden = (filters.dateRange === 'all' && filters.type === 'all' && !filters.openingsOnly);
+  clearButton.hidden = (filters.dateRange === 'all' && filters.type === 'all');
 }
 
 // ── Card builder ─────────────────────────────────────────────────────────────
@@ -387,14 +384,12 @@ function createCard(shift) {
 // One chip per staff member (from the staff tab on the Sheet). Clicking a name
 // shows only the events where that person is on the calendar guest list.
 function buildStaffChips() {
-  const openingsBtn = typeRow.querySelector('#filter-openings');
   typeRow.innerHTML = '';
   typeRow.appendChild(makeChip('all', 'Everyone', allShifts.length));
   staffList.forEach(p => {
     const count = allShifts.filter(s => isAssignedTo(s, p.email)).length;
     typeRow.appendChild(makeChip(p.email, p.name, count));
   });
-  if (openingsBtn) typeRow.appendChild(openingsBtn);
 }
 
 function makeChip(value, label, count) {
@@ -421,21 +416,13 @@ dateGroup.addEventListener('click', e => {
   render();
 });
 
-openingsToggle.addEventListener('click', () => {
-  filters.openingsOnly = !filters.openingsOnly;
-  openingsToggle.setAttribute('aria-pressed', filters.openingsOnly);
-  render();
-});
-
 clearButton.addEventListener('click', () => {
   filters.dateRange = 'all';
   filters.type = 'all';
-  filters.openingsOnly = false;
   dateGroup.querySelectorAll('.seg').forEach(b =>
     b.classList.toggle('active', b.dataset.range === 'all'));
   typeRow.querySelectorAll('.chip').forEach(c =>
     c.classList.toggle('active', c.dataset.type === 'all'));
-  openingsToggle.setAttribute('aria-pressed', 'false');
   render();
 });
 
