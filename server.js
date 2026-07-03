@@ -29,10 +29,6 @@ const {
   markCheckIn,
   markCheckOut,
   markNoShows,
-  getSignupsForReportDate,
-  markAttendanceReport,
-  addShiftNote,
-  getShiftNotes,
 } = require('./google');
 
 const app  = express();
@@ -310,67 +306,6 @@ app.post('/api/checkout', publicApiLimiter, async (req, res) => {
   } catch (err) {
     console.error('[POST /api/checkout]', err.message);
     res.status(500).json({ error: 'Could not record check-out. Please try again.' });
-  }
-});
-
-// ── Staff attendance report ───────────────────────────────────────────────────
-
-// GET /api/staff/report?date=YYYY-MM-DD
-app.get('/api/staff/report', requireStaff, async (req, res) => {
-  const date = (req.query.date || '').trim() ||
-    new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
-  try {
-    res.json(await getSignupsForReportDate(date));
-  } catch (err) {
-    console.error('[GET /api/staff/report]', err.message);
-    res.status(500).json({ error: 'Could not load report data.' });
-  }
-});
-
-// POST /api/staff/report/attendance  body: { signupId, status, notes? }
-app.post('/api/staff/report/attendance', requireStaff, async (req, res) => {
-  const { signupId, status, notes } = req.body;
-  if (!signupId || !['Attended', 'No-show'].includes(status)) {
-    return res.status(400).json({ error: 'Invalid request.' });
-  }
-  try {
-    const result = await markAttendanceReport(
-      signupId.trim().toUpperCase(), status,
-      notes !== undefined ? String(notes) : undefined,
-    );
-    if (!result.ok) return res.status(404).json({ error: result.error });
-    res.json({ ok: true, hours: result.hours });
-  } catch (err) {
-    console.error('[POST /api/staff/report/attendance]', err.message);
-    res.status(500).json({ error: 'Could not save attendance.' });
-  }
-});
-
-// GET /api/staff/report/notes?date=YYYY-MM-DD&shiftName=...
-app.get('/api/staff/report/notes', requireStaff, async (req, res) => {
-  const { date, shiftName } = req.query;
-  if (!date || !shiftName) return res.status(400).json({ error: 'date and shiftName are required.' });
-  try {
-    const note = await getShiftNotes(date, shiftName.trim());
-    res.json({ note: note || '' });
-  } catch (err) {
-    console.error('[GET /api/staff/report/notes]', err.message);
-    res.status(500).json({ error: 'Could not load notes.' });
-  }
-});
-
-// POST /api/staff/report/note  body: { date, shiftName, shiftTime, note }
-app.post('/api/staff/report/note', requireStaff, async (req, res) => {
-  const { date, shiftName, shiftTime, note } = req.body;
-  if (!date || !shiftName || !note) {
-    return res.status(400).json({ error: 'date, shiftName, and note are required.' });
-  }
-  try {
-    await addShiftNote(date, shiftName, shiftTime || '', note);
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('[POST /api/staff/report/note]', err.message);
-    res.status(500).json({ error: 'Could not save note.' });
   }
 });
 

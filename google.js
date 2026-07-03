@@ -493,36 +493,6 @@ async function ensureHeaders() {
     console.log('[sheets] "Hours Logged" header added to column N');
   }
 
-  // Ensure Notes header in column O (index 14).
-  if ((existing[14] || '').trim() !== 'Notes') {
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: SHEET_ID,
-      range: `${SHEET_TAB}!O1`,
-      valueInputOption: 'RAW',
-      requestBody: { values: [['Notes']] },
-    });
-    console.log('[sheets] "Notes" header added to column O');
-  }
-
-  // Ensure shift_notes tab has a header row.
-  try {
-    const snRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range:         'shift_notes!A1',
-    });
-    const snA1 = ((snRes.data.values || [])[0] || [])[0] || '';
-    if (snA1.trim() !== 'Timestamp') {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId:    SHEET_ID,
-        range:            'shift_notes!A1',
-        valueInputOption: 'RAW',
-        requestBody:      { values: [['Timestamp', 'Date', 'Shift Name', 'Shift Time', 'Note']] },
-      });
-      console.log('[sheets] shift_notes header row written');
-    }
-  } catch {
-    // Tab doesn't exist yet — headers will be added when the first note is saved.
-  }
 }
 
 // Reads every signup row from the sheet and returns plain objects.
@@ -547,7 +517,7 @@ async function getAllSignups() {
       email:      r[2] || '',
       shift_id:   r[3] || '',
       shift_name: r[4] || '',
-      shift_date: r[5] || '',
+      shift_date: normalizeDateStr(r[5]),
       shift_time: r[6] || '',
       signup_id:  r[7] || '',  // col H
       // r[8] = Reminded (col I) — managed by send-reminders.js
@@ -556,7 +526,6 @@ async function getAllSignups() {
       checkin_time:  r[11] ? (formatPacific(new Date(r[11])) || r[11]) : '',  // col L
       checkout_time: r[12] ? (formatPacific(new Date(r[12])) || r[12]) : '',  // col M
       hours_logged:  r[13] || '',  // col N — decimal hours
-      notes:         r[14] || '',  // col O — staff report notes
     }));
 }
 
@@ -1118,7 +1087,7 @@ async function markNoShows(dateStr) {
   for (let i = 1; i < rows.length; i++) {
     const row        = rows[i];
     if (!row || !row[3]) continue;              // skip rows without a shift ID
-    const shiftDate  = (row[5]  || '').trim(); // col F
+    const shiftDate  = normalizeDateStr(row[5]); // col F
     const attendance = (row[10] || '').trim(); // col K
     if (shiftDate === targetDate && !attendance) {
       updates.push({ range: `${SHEET_TAB}!K${i + 1}`, values: [['No-show']] });
@@ -1241,139 +1210,4 @@ async function getStaffList() {
   return _staffCache;
 }
 
-// ── Staff attendance report ───────────────────────────────────────────────────
-
-// Calculates decimal hours from a shift time string like "9:00am–11:00am".
-function calcHoursFromTimeRange(timeStr) {
-  const parts = (timeStr || '').split(/[-–—]/);
-  if (parts.length < 2) return null;
-  const start = timeToMinutes(parts[0].trim());
-  const end   = timeToMinutes(parts[1].trim());
-  if (start === null || end === null) return null;
-  return Math.round((end - start) / 60 * 100) / 100;
-}
-
-// Returns all signups for a given date grouped by shift, sorted by start time.
-async function getSignupsForReportDate(date) {
-  const allSignups = await getAllSignups();
-  const filtered   = allSignups.filter(s => s.shift_date === date);
-
-  const map = new Map();
-  for (const s of filtered) {
-    const key = `${s.shift_name}|${s.shift_time}`;
-    if (!map.has(key)) {
-      map.set(key, { shift_name: s.shift_name, shift_time: s.shift_time, signups: [] });
-    }
-    map.get(key).signups.push({
-      signup_id:    s.signup_id,
-      name:         s.name,
-      email:        s.email,
-      registered:   s.registered,
-      attendance:   s.attendance,
-      hours_logged: s.hours_logged,
-      notes:        s.notes,
-    });
-  }
-
-  return [...map.values()].sort((a, b) => {
-    const aM = timeToMinutes((a.shift_time || '').split(/[-–—]/)[0].trim()) ?? 0;
-    const bM = timeToMinutes((b.shift_time || '').split(/[-–—]/)[0].trim()) ?? 0;
-    return aM - bM;
-  });
-}
-
-// Marks a volunteer as Attended or No-show from the staff report.
-// For Attended, auto-calculates hours from the shift time stored in col G.
-async function markAttendanceReport(signupId, status, notes) {
-  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
-  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
-
-  const { row, rowData } = await findSheetRow(sheets, signupId);
-  if (row === -1) return { ok: false, error: 'Signup not found.' };
-
-  const updates = [{ range: `${SHEET_TAB}!K${row}`, values: [[status]] }];
-
-  let hours = null;
-  if (status === 'Attended') {
-    hours = calcHoursFromTimeRange(rowData ? (rowData[6] || '') : '');
-    if (hours !== null) {
-      updates.push({ range: `${SHEET_TAB}!N${row}`, values: [[hours.toFixed(2)]] });
-    }
-  } else {
-    updates.push({ range: `${SHEET_TAB}!N${row}`, values: [['']] });
-  }
-
-  if (notes !== undefined && notes !== null) {
-    updates.push({ range: `${SHEET_TAB}!O${row}`, values: [[String(notes)]] });
-  }
-
-  await sheets.spreadsheets.values.batchUpdate({
-    spreadsheetId: SHEET_ID,
-    requestBody:   { valueInputOption: 'RAW', data: updates },
-  });
-
-  return { ok: true, hours };
-}
-
-// Returns the most recent note for a given shift date + name from the shift_notes tab.
-async function getShiftNotes(date, shiftName) {
-  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
-  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
-  try {
-    const res  = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range:         'shift_notes!A:E',
-    });
-    const rows     = res.data.values || [];
-    const matching = rows.filter(r => r[1] === date && r[2] === shiftName);
-    if (!matching.length) return null;
-    return matching[matching.length - 1][4] || null;
-  } catch (err) {
-    if (err.code === 400 || (err.message || '').includes('Unable to parse range')) return null;
-    throw err;
-  }
-}
-
-// Appends a shift-level note to the 'shift_notes' tab.
-// Auto-creates the tab on first use if it doesn't exist.
-async function addShiftNote(date, shiftName, shiftTime, note) {
-  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
-  // Normalise any en/em dash in the time range to a plain hyphen before writing.
-  shiftTime = String(shiftTime || '').replace(/[–—]/g, '-');
-  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
-
-  async function doAppend() {
-    await sheets.spreadsheets.values.append({
-      spreadsheetId:    SHEET_ID,
-      range:            'shift_notes!A1',
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [[new Date().toISOString(), date, sanitizeForSheet(shiftName), shiftTime, sanitizeForSheet(note)]],
-      },
-    });
-  }
-
-  try {
-    await doAppend();
-  } catch (err) {
-    // Tab doesn't exist yet — create it with headers, then append the note.
-    if (err.code === 400 || (err.message || '').includes('Unable to parse range')) {
-      await sheets.spreadsheets.batchUpdate({
-        spreadsheetId: SHEET_ID,
-        requestBody:   { requests: [{ addSheet: { properties: { title: 'shift_notes' } } }] },
-      });
-      await sheets.spreadsheets.values.update({
-        spreadsheetId:    SHEET_ID,
-        range:            'shift_notes!A1',
-        valueInputOption: 'RAW',
-        requestBody:      { values: [['Timestamp', 'Date', 'Shift Name', 'Shift Time', 'Note']] },
-      });
-      await doAppend();
-    } else {
-      throw err;
-    }
-  }
-  return { ok: true };
-}
-
-module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getStaffList, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, getSignupsForReportDate, markAttendanceReport, addShiftNote, getShiftNotes, sanitizeForSheet };
+module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getStaffList, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, sanitizeForSheet };
