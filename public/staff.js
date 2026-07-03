@@ -127,7 +127,10 @@ const reportDoneBtn     = document.getElementById('report-dialog-done');
 
 // ── State ────────────────────────────────────────────────────────────────────
 let allShifts = [];
+let staffList = [];   // [{ name, email }] from the staff tab on the Sheet
 let selectedShiftId = null;
+// filters.type: 'all' or a staff member's email — shifts are matched by the
+// calendar event's guest list, not the title (titles can name several people).
 const filters = { dateRange: 'all', type: 'all', openingsOnly: false };
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
@@ -135,21 +138,29 @@ async function loadShifts() {
   statusEl.textContent = 'Loading…';
   shiftsContainer.innerHTML = '';
   try {
-    const res = await fetch('/api/staff/shifts', {
-      headers: { 'Authorization': `Bearer ${sessionToken}` },
-    });
-    if (res.status === 401) {
+    const authHeader = { 'Authorization': `Bearer ${sessionToken}` };
+    const [shiftsRes, staffRes] = await Promise.all([
+      fetch('/api/staff/shifts', { headers: authHeader }),
+      fetch('/api/staff/list',   { headers: authHeader }),
+    ]);
+    if (shiftsRes.status === 401) {
       sessionToken = '';
       showGate('Session expired — please sign in again.');
       return;
     }
-    allShifts = await res.json();
+    allShifts = await shiftsRes.json();
+    staffList = staffRes.ok ? await staffRes.json() : [];
     statNumber.textContent = allShifts.filter(s => !s.is_full).length;
-    buildTypeChips();
+    buildStaffChips();
     render();
   } catch {
     statusEl.textContent = 'Sorry, something went wrong loading the visits.';
   }
+}
+
+// True when this staff member is on the event's invited-guest list.
+function isAssignedTo(shift, email) {
+  return (shift.attendees || []).some(a => a.email === email);
 }
 
 // ── Filter pipeline ──────────────────────────────────────────────────────────
@@ -169,7 +180,7 @@ function getVisible() {
               d.getMonth()    !== today.getMonth()) return false;
         }
       }
-      if (filters.type !== 'all' && (s.category || 'Visit') !== filters.type) return false;
+      if (filters.type !== 'all' && !isAssignedTo(s, filters.type)) return false;
       if (filters.openingsOnly && s.has_limit && s.is_full) return false;
       return true;
     })
@@ -372,27 +383,16 @@ function createCard(shift) {
   return card;
 }
 
-// ── Type chips ───────────────────────────────────────────────────────────────
-const MAIN_FILTER_TYPES = [
-  'Farm Chores',
-  'Open Hours',
-  'Mobile Visits',
-  'Volunteer Orientation',
-  'Farm Visits',
-];
-
-function buildTypeChips() {
-  const counts = new Map();
-  allShifts.forEach(s => {
-    const t = s.category || 'Visit';
-    counts.set(t, (counts.get(t) || 0) + 1);
-  });
-
+// ── Staff chips ──────────────────────────────────────────────────────────────
+// One chip per staff member (from the staff tab on the Sheet). Clicking a name
+// shows only the events where that person is on the calendar guest list.
+function buildStaffChips() {
   const openingsBtn = typeRow.querySelector('#filter-openings');
   typeRow.innerHTML = '';
-  typeRow.appendChild(makeChip('all', 'All types', allShifts.length));
-  MAIN_FILTER_TYPES.forEach(t => {
-    if (counts.has(t)) typeRow.appendChild(makeChip(t, t, counts.get(t)));
+  typeRow.appendChild(makeChip('all', 'Everyone', allShifts.length));
+  staffList.forEach(p => {
+    const count = allShifts.filter(s => isAssignedTo(s, p.email)).length;
+    typeRow.appendChild(makeChip(p.email, p.name, count));
   });
   if (openingsBtn) typeRow.appendChild(openingsBtn);
 }

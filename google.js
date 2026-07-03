@@ -318,6 +318,15 @@ async function refreshCalendarCache() {
       capacity:  has_limit ? capacity : 999999, // unlimited events never fill up
       has_limit,
       staff_only,
+      // Invited guests on the calendar event — used to match staff assignments.
+      // We go by the guest list rather than the event title because titles can
+      // mention several people and aren't reliable.
+      attendees: (event.attendees || [])
+        .filter(a => a.email && !a.resource)
+        .map(a => ({
+          email:    a.email.toLowerCase(),
+          response: a.responseStatus || 'needsAction', // accepted / declined / tentative / needsAction
+        })),
       description_volunteers, // shown on volunteer + staff pages
       description_staff,      // shown on staff page only
     });
@@ -340,7 +349,7 @@ async function getCachedShifts() {
 setInterval(async () => {
   try { await refreshCalendarCache(); }
   catch (err) { console.error('[calendar] background refresh failed:', err.message); }
-}, CACHE_TTL_MS);
+}, CACHE_TTL_MS).unref(); // unref: don't hold the process open (lets tests exit)
 
 // ── Sheets helpers ────────────────────────────────────────────────────────────
 //
@@ -560,6 +569,7 @@ async function getUpcomingSignupsByEmail(email) {
   return signups
     .filter(s =>
       s.email.toLowerCase() === norm &&
+      s.shift_date >= today &&
       s.attendance !== 'Attended' &&
       s.attendance !== 'No-show'
     )
@@ -601,7 +611,8 @@ async function getShifts() {
   return result
     .filter(s => !s.staff_only)                    // { }-wrapped title = staff-only event
     .filter(s => !/^hide\b/i.test(s.title || '')) // HIDE- prefix = staff-only event
-    .map(({ description_staff, staff_only, ...pub }) => pub);
+    // attendees are staff emails — never expose them on the public endpoint.
+    .map(({ description_staff, staff_only, attendees, ...pub }) => pub);
 }
 
 // Returns all upcoming shifts for the staff page, including both description
@@ -812,6 +823,23 @@ function normalizeTime(raw) {
   return null;
 }
 
+// Looks up the numeric grid ID of the signups tab (needed for row deletes).
+// The value is stable for the life of the tab, so it's cached after first use —
+// hardcoding 0 would silently delete from the wrong tab if the signups tab
+// were ever recreated or reordered.
+let _signupsTabId = null;
+async function getSignupsTabId(sheets) {
+  if (_signupsTabId !== null) return _signupsTabId;
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: SHEET_ID,
+    fields: 'sheets.properties(sheetId,title)',
+  });
+  const tab = (meta.data.sheets || []).find(s => s.properties.title === SHEET_TAB);
+  if (!tab) throw new Error(`Tab "${SHEET_TAB}" not found in the spreadsheet.`);
+  _signupsTabId = tab.properties.sheetId;
+  return _signupsTabId;
+}
+
 // Cancels a volunteer signup by its unique Signup ID (column I).
 // Returns { ok: true, message } or { ok: false, error }.
 async function cancelSignupById(signupId) {
@@ -848,6 +876,19 @@ async function cancelSignupById(signupId) {
   // Sheet rows are 1-indexed; array index N = sheet row N+1.
   const sheetRow = matchIndex + 1;
 
+  // Re-read just this row's Signup ID cell right before deleting. Row numbers
+  // shift when other rows are added/removed, so deleting by a stale index
+  // could remove someone else's signup. If the cell no longer matches, abort
+  // and ask the volunteer to retry rather than delete the wrong row.
+  const verify = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${SHEET_TAB}!H${sheetRow}`,
+  });
+  const cellNow = (((verify.data.values || [])[0] || [])[0] || '').trim().toUpperCase();
+  if (cellNow !== id) {
+    return { ok: false, error: 'The sheet changed while cancelling — please try again.' };
+  }
+
   // Delete the entire row so the sheet stays clean (no blank rows).
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId: SHEET_ID,
@@ -855,7 +896,7 @@ async function cancelSignupById(signupId) {
       requests: [{
         deleteDimension: {
           range: {
-            sheetId:    0,
+            sheetId:    await getSignupsTabId(sheets),
             dimension:  'ROWS',
             startIndex: sheetRow - 1,  // 0-indexed
             endIndex:   sheetRow,
@@ -1121,6 +1162,65 @@ async function getPasswords() {
   return result;
 }
 
+// ── Staff list ────────────────────────────────────────────────────────────────
+//
+// Reads the staff tab on the Google Sheet (any tab with "staff" in its title,
+// excluding the signups tab). Expected columns: Name and Email — matched by
+// header when present, otherwise A=name, B=email. Emails are used to match
+// staff against calendar event guest lists; names label the filter chips.
+
+let _staffCache      = null;
+let _staffExpiresAt  = 0;
+const STAFF_CACHE_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getStaffList() {
+  if (_staffCache && Date.now() < _staffExpiresAt) return _staffCache;
+
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+
+  // Find the staff tab by title so the exact spelling in the sheet doesn't matter.
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: SHEET_ID,
+    fields: 'sheets.properties.title',
+  });
+  const titles = (meta.data.sheets || []).map(s => s.properties.title);
+  const tab = titles.find(t => /sta+f/i.test(t) && !/signup/i.test(t));
+  if (!tab) throw new Error(`No staff tab found. Tabs: ${titles.join(', ')}`);
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range:         `'${tab}'!A:Z`,
+  });
+
+  const rows = res.data.values || [];
+  if (!rows.length) {
+    _staffCache = []; _staffExpiresAt = Date.now() + STAFF_CACHE_MS;
+    return _staffCache;
+  }
+
+  // Match columns by header row when there is one; fall back to A=name B=email.
+  const headers  = rows[0].map(h => (h || '').trim().toLowerCase());
+  const nameIdx  = headers.findIndex(h => h.includes('name'));
+  const emailIdx = headers.findIndex(h => h.includes('email') || h.includes('mail'));
+  const hasHeader = nameIdx >= 0 || emailIdx >= 0;
+  const nIdx = nameIdx  >= 0 ? nameIdx  : 0;
+  const eIdx = emailIdx >= 0 ? emailIdx : 1;
+
+  const list = [];
+  for (let i = hasHeader ? 1 : 0; i < rows.length; i++) {
+    const name  = (rows[i][nIdx] || '').trim();
+    const email = (rows[i][eIdx] || '').trim().toLowerCase();
+    if (!name) continue;
+    list.push({ name, email });
+  }
+
+  _staffCache     = list;
+  _staffExpiresAt = Date.now() + STAFF_CACHE_MS;
+  console.log(`[staff] loaded ${list.length} staff member(s) from tab "${tab}"`);
+  return _staffCache;
+}
+
 // ── Staff attendance report ───────────────────────────────────────────────────
 
 // Calculates decimal hours from a shift time string like "9:00am–11:00am".
@@ -1256,4 +1356,4 @@ async function addShiftNote(date, shiftName, shiftTime, note) {
   return { ok: true };
 }
 
-module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, getSignupsForReportDate, markAttendanceReport, addShiftNote, getShiftNotes, sanitizeForSheet };
+module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getStaffList, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, getSignupsForReportDate, markAttendanceReport, addShiftNote, getShiftNotes, sanitizeForSheet };

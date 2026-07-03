@@ -23,6 +23,7 @@ const {
   getUpcomingSignupsByEmail,
   ensureHeaders,
   getPasswords,
+  getStaffList,
   getTodaySignupsForPerson,
   getTodayCheckoutsForPerson,
   markCheckIn,
@@ -229,6 +230,18 @@ app.get('/api/staff/shifts', requireStaff, async (req, res) => {
   }
 });
 
+// GET /api/staff/list  (requires staff auth)
+// Returns the staff roster [{ name, email }] from the staff tab on the Sheet.
+// Powers the per-person filter chips on the staff page.
+app.get('/api/staff/list', requireStaff, async (req, res) => {
+  try {
+    res.json(await getStaffList());
+  } catch (err) {
+    console.error('[GET /api/staff/list]', err.message);
+    res.status(500).json({ error: 'Could not load the staff list.' });
+  }
+});
+
 // GET /api/admin/shifts  (requires admin auth)
 // Returns all shifts with their full signup lists (name + email per person).
 app.get('/api/admin/shifts', requireAdmin, async (req, res) => {
@@ -369,7 +382,9 @@ app.post('/api/staff/report/note', requireStaff, async (req, res) => {
 app.post('/api/cron/mark-noshows', async (req, res) => {
   const secret   = (process.env.CRON_SECRET || '').trim();
   const supplied = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim();
-  if (secret && supplied !== secret) {
+  // Fail closed: with no CRON_SECRET configured, the endpoint stays locked —
+  // the internal node-cron schedule below doesn't go through HTTP anyway.
+  if (!secret || supplied !== secret) {
     return res.status(401).json({ error: 'Unauthorized.' });
   }
   try {
