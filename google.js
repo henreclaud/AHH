@@ -495,6 +495,22 @@ async function ensureHeaders() {
 
 }
 
+// Normalises a sheet date string to "YYYY-MM-DD" for comparison.
+// Google Sheets may silently reformat dates written as 2026-07-02 into a
+// locale form like 7/2/2026, which breaks exact string matching everywhere
+// (no-show cron, staff report, upcoming-signup lookup).
+function normalizeDateStr(s) {
+  s = String(s || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/); // M/D/YYYY (US sheet locale)
+  if (m) {
+    const y = m[3].length === 2 ? `20${m[3]}` : m[3];
+    return `${y}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  }
+  const d = new Date(s);
+  return isNaN(d) ? s : d.toLocaleDateString('en-CA', { timeZone: PT });
+}
+
 // Reads every signup row from the sheet and returns plain objects.
 async function getAllSignups() {
   if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
