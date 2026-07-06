@@ -24,6 +24,7 @@ const {
   ensureHeaders,
   getPasswords,
   getStaffList,
+  getBannerMessages,
   getTodaySignupsForPerson,
   getTodayCheckoutsForPerson,
   markCheckIn,
@@ -223,6 +224,29 @@ app.get('/api/staff/shifts', requireStaff, async (req, res) => {
   } catch (err) {
     console.error('[GET /api/staff/shifts]', err.message);
     res.status(500).json({ error: 'Could not load shifts. Please try again.' });
+  }
+});
+
+// GET /api/message — banner message for the volunteer page (public).
+// Staff write it into cell A2 of the restricted message sheet.
+app.get('/api/message', async (req, res) => {
+  try {
+    const { volunteer } = await getBannerMessages();
+    res.json({ message: volunteer });
+  } catch (err) {
+    console.error('[GET /api/message]', err.message);
+    res.json({ message: '' }); // banner is cosmetic — never error the page
+  }
+});
+
+// GET /api/staff/message — banner message for the staff page (cell B2).
+app.get('/api/staff/message', requireStaff, async (req, res) => {
+  try {
+    const { staff } = await getBannerMessages();
+    res.json({ message: staff });
+  } catch (err) {
+    console.error('[GET /api/staff/message]', err.message);
+    res.json({ message: '' });
   }
 });
 

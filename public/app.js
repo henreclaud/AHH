@@ -69,8 +69,9 @@ function getVisible() {
       if (filters.type === '__other__') {
         if (MAIN_FILTER_TYPES.includes(s.category || 'Visit')) return false;
       } else if (filters.type !== 'all' && (s.category || 'Visit') !== filters.type) return false;
-      // Openings only — shifts with no limit always pass; limited shifts must have spots left
-      if (filters.openingsOnly && s.has_limit && s.is_full) return false;
+      // Openings only — a shift counts as an "open opportunity" only when it
+      // has a volunteer limit AND still has spots left (per Peter: exclude Limit=null).
+      if (filters.openingsOnly && (!s.has_limit || s.is_full)) return false;
       return true;
     })
     .sort(compareDateTime); // always soonest first
@@ -239,7 +240,7 @@ function buildTypeChips() {
 
   // Openings toggle flows at the end of the chip row.
   if (openingsBtn) {
-    const openCount = allShifts.filter(s => !(s.has_limit && s.is_full)).length;
+    const openCount = allShifts.filter(s => s.has_limit && !s.is_full).length;
     openingsBtn.innerHTML = `Open Opportunities<span class="chip-count">${openCount}</span>`;
     typeRow.appendChild(openingsBtn);
   }
@@ -352,4 +353,19 @@ function escapeHtml(t) {
   const el = document.createElement('div'); el.textContent = t ?? ''; return el.innerHTML;
 }
 
+// ── Announcement banner ───────────────────────────────────────────────────────
+// Shows the staff-written message (restricted sheet, cell A2) when one is set.
+async function loadBanner() {
+  try {
+    const res  = await fetch('/api/message');
+    const data = await res.json();
+    const bannerEl = document.getElementById('site-banner');
+    if (data.message) {
+      bannerEl.textContent = data.message; // textContent — never rendered as HTML
+      bannerEl.hidden = false;
+    }
+  } catch { /* banner is cosmetic — ignore failures */ }
+}
+
 loadShifts();
+loadBanner();

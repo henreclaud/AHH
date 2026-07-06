@@ -1171,6 +1171,46 @@ async function getPasswords() {
   return result;
 }
 
+// ── Message banners ───────────────────────────────────────────────────────────
+//
+// Peter's separate restricted sheet (staff never touch the main data sheet).
+// Cell A2 = message for volunteers, B2 = message for staff, each ≤256 chars.
+// When a cell has text, the matching page shows a banner box in the header
+// area; clearing the cell removes the banner within a minute.
+// The service account must be given Viewer access to this sheet.
+
+const MESSAGE_SHEET_ID = process.env.MESSAGE_SHEET_ID ||
+  '1nkYmEH4Miax_nMn6lS6312Tx1AIpHpO5SwqiZ1o3w7Y';
+
+let _msgCache      = null;
+let _msgExpiresAt  = 0;
+const MSG_CACHE_MS = 60 * 1000; // 1 minute — banner edits show up fast
+
+async function getBannerMessages() {
+  if (_msgCache && Date.now() < _msgExpiresAt) return _msgCache;
+
+  let volunteer = '';
+  let staff     = '';
+  try {
+    const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+    // No tab name — reads the first sheet, which is all this spreadsheet has.
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: MESSAGE_SHEET_ID,
+      range:         'A2:B2',
+    });
+    const row = ((res.data.values || [])[0]) || [];
+    volunteer = String(row[0] || '').trim().slice(0, 256);
+    staff     = String(row[1] || '').trim().slice(0, 256);
+  } catch (err) {
+    // Fail soft — an unshared or missing sheet must never break the app.
+    console.warn('[banner] could not read message sheet:', err.message);
+  }
+
+  _msgCache     = { volunteer, staff };
+  _msgExpiresAt = Date.now() + MSG_CACHE_MS;
+  return _msgCache;
+}
+
 // ── Staff list ────────────────────────────────────────────────────────────────
 //
 // Reads the staff tab on the Google Sheet (any tab with "staff" in its title,
@@ -1230,4 +1270,4 @@ async function getStaffList() {
   return _staffCache;
 }
 
-module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getStaffList, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, sanitizeForSheet };
+module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getStaffList, getBannerMessages, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, sanitizeForSheet };

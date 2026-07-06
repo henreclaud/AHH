@@ -143,6 +143,7 @@ async function loadShifts() {
     statNumber.textContent = allShifts.filter(s => !s.is_full).length;
     buildStaffChips();
     render();
+    loadBanner();
   } catch {
     statusEl.textContent = 'Sorry, something went wrong loading the visits.';
   }
@@ -151,6 +152,21 @@ async function loadShifts() {
 // True when this staff member is on the event's invited-guest list.
 function isAssignedTo(shift, email) {
   return (shift.attendees || []).some(a => a.email === email);
+}
+
+// Announcement banner — staff message from the restricted sheet (cell B2).
+async function loadBanner() {
+  try {
+    const res  = await fetch('/api/staff/message', {
+      headers: { 'Authorization': `Bearer ${sessionToken}` },
+    });
+    const data = await res.json();
+    const bannerEl = document.getElementById('site-banner');
+    if (data.message) {
+      bannerEl.textContent = data.message; // textContent — never rendered as HTML
+      bannerEl.hidden = false;
+    }
+  } catch { /* banner is cosmetic — ignore failures */ }
 }
 
 // ── Filter pipeline ──────────────────────────────────────────────────────────
