@@ -227,9 +227,13 @@ function parseShiftName(title) {
 function deriveCategory(name) {
   if (/farm\s*chore/i.test(name))        return { category: 'Farm Chores',          icon: '🐐' };
   if (/open\s*h/i.test(name))            return { category: 'Open Hours',            icon: '🏡' };
-  if (/mobile|petting/i.test(name))      return { category: 'Mobile Visits',         icon: '🐤' };
-  if (/volunteer\s*orient/i.test(name))  return { category: 'Volunteer Orientation', icon: '📋' };
-  if (/farm\s*visit/i.test(name))        return { category: 'Farm Visits',           icon: '🌾' };
+  if (/mobile|petting/i.test(name))      return { category: 'Mobile Visit',          icon: '🐤' };
+  if (/volunteer\s*orient/i.test(name))  return { category: 'Orientation',           icon: '📋' };
+  // Corp/Private checked before the generic Farm Visit pattern so e.g.
+  // "Private Farm Visit" lands in the more specific bucket.
+  if (/corp(orate)?/i.test(name))        return { category: 'Corp Visit',           icon: '🏢' };
+  if (/private/i.test(name))             return { category: 'Private Visit',       icon: '🔒' };
+  if (/farm\s*visit/i.test(name))        return { category: 'Farm Visit',           icon: '🌾' };
   if (/pony|horse/i.test(name))          return { category: 'Pony Visit',            icon: '🐴' };
   if (/bunny|rabbit/i.test(name))        return { category: 'Bunny Visit',           icon: '🐰' };
   if (/guinea|reading/i.test(name))      return { category: 'Reading Buddies',       icon: '🐹' };

@@ -207,9 +207,12 @@ function createCard(shift) {
 const MAIN_FILTER_TYPES = [
   'Farm Chores',
   'Open Hours',
-  'Mobile Visits',
-  'Volunteer Orientation',
-  'Farm Visits',
+  'Mobile Visit',
+  'Orientation',
+  'Corp Visit',
+  'Private Visit',
+  'Farm Visit',
+  'Workshop',
 ];
 
 function buildTypeChips() {
