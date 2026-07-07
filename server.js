@@ -9,6 +9,7 @@ const crypto    = require('crypto');
 const cron      = require('node-cron');
 const helmet    = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
 
 // Load .env file when running locally.
 // On Render the real environment variables are set in the dashboard.
@@ -35,9 +36,27 @@ const {
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-// Render terminates TLS at its proxy, so the real client IP arrives in
-// X-Forwarded-For. Trust one proxy hop so rate limiting keys on the real IP.
-app.set('trust proxy', 1);
+// The app sits behind two proxy hops: Cloudflare (custom domain) → Render.
+// Trusting a fixed hop count is unreliable here, and getting it wrong lets a
+// rate-limit-bypassing attacker win because every request looks like it comes
+// from the proxy's IP. Instead we trust the proxies and derive the real client
+// IP ourselves (see clientIp below), which the limiters key on.
+app.set('trust proxy', true);
+
+// Best-effort real client IP for rate limiting. Cloudflare sets
+// CF-Connecting-IP to the true visitor IP and does not let clients forge it
+// (it overwrites any incoming value); we prefer that, then fall back to the
+// left-most X-Forwarded-For entry, then Express's own req.ip.
+function clientIp(req) {
+  const cf  = req.headers['cf-connecting-ip'];
+  const xff = req.headers['x-forwarded-for'];
+  const ip  = cf ? String(cf).trim()
+            : xff ? String(xff).split(',')[0].trim()
+            : req.ip;
+  // Normalise so a single IPv6 address (or /64 block) can't be spread across
+  // many keys to dodge the limit — the library's helper collapses it correctly.
+  return ipKeyGenerator(ip);
+}
 
 // Security headers. CSP is left off because the pages use inline style
 // attributes and would otherwise break; the other protections (no MIME
@@ -59,6 +78,21 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '64kb' }));
+
+// Body-parse guard. Without this, a POST that omits the JSON content-type (or
+// sends malformed/oversized JSON) leaves req.body undefined and the route
+// crashes with a 500 on the first req.body.x access. Catch the parser's own
+// error and normalise req.body so every handler can read it safely, turning a
+// crash into a clean 400.
+app.use((err, req, res, next) => {
+  if (err && (err.type === 'entity.parse.failed' || err.type === 'entity.too.large' || err instanceof SyntaxError)) {
+    return res.status(400).json({ error: 'Invalid request body.' });
+  }
+  if (err) return next(err);
+  next();
+});
+app.use((req, res, next) => { if (req.body == null) req.body = {}; next(); });
+
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
 // ── Rate limiters ───────────────────────────────────────────────────────────
@@ -68,6 +102,7 @@ const loginLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientIp,
   message: { error: 'Too many attempts. Please wait a few minutes and try again.' },
 });
 
@@ -78,6 +113,7 @@ const publicApiLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientIp,
   message: { error: 'Too many requests. Please slow down and try again shortly.' },
 });
 
