@@ -82,12 +82,11 @@ const publicApiLimiter = rateLimit({
 });
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
-// Token-based auth for Admin and Staff pages.
+// Token-based auth for the Staff page.
 // Tokens are random 32-byte hex strings kept in memory; they expire on server
 // restart (deploy), requiring a re-login.  Passwords are read from the "pwd"
 // tab on the Google Sheet so Peter can update them without a code change.
 
-const adminTokens = new Set();
 const staffTokens = new Set();
 
 function makeRequireRole(tokenSet) {
@@ -98,7 +97,6 @@ function makeRequireRole(tokenSet) {
     res.status(401).json({ error: 'Unauthorized' });
   };
 }
-const requireAdmin = makeRequireRole(adminTokens);
 const requireStaff = makeRequireRole(staffTokens);
 
 // Length-safe constant-time string comparison — avoids leaking the password
@@ -137,11 +135,6 @@ async function handleLogin(role, tokenSet, supplied, res) {
   console.log(`[auth] ${role} login successful`);
   res.json({ token });
 }
-
-// POST /api/admin/login — body: { password }
-app.post('/api/admin/login', loginLimiter, async (req, res) => {
-  await handleLogin('admin', adminTokens, (req.body.password || '').trim(), res);
-});
 
 // POST /api/staff/login — body: { password }
 app.post('/api/staff/login', loginLimiter, async (req, res) => {
@@ -228,8 +221,6 @@ app.post('/api/signups/cancel', publicApiLimiter, async (req, res) => {
   }
 });
 
-// ── Admin API ─────────────────────────────────────────────────────────────────
-
 // GET /api/staff/shifts  (requires staff auth)
 // Returns all shifts with both description sections AND the full signup list per shift.
 app.get('/api/staff/shifts', requireStaff, async (req, res) => {
@@ -273,17 +264,6 @@ app.get('/api/staff/list', requireStaff, async (req, res) => {
   } catch (err) {
     console.error('[GET /api/staff/list]', err.message);
     res.status(500).json({ error: 'Could not load the staff list.' });
-  }
-});
-
-// GET /api/admin/shifts  (requires admin auth)
-// Returns all shifts with their full signup lists (name + email per person).
-app.get('/api/admin/shifts', requireAdmin, async (req, res) => {
-  try {
-    res.json(await getAdminShifts());
-  } catch (err) {
-    console.error('[GET /api/admin/shifts]', err.message);
-    res.status(500).json({ error: 'Could not load admin data. Please try again.' });
   }
 });
 

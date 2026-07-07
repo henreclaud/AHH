@@ -1,6 +1,7 @@
 // @ts-check
 // Tests for the read-only Calendar page (calendar.html):
-//  - reachable from a "Calendar" link in the main nav
+//  - reachable directly by URL (embedded standalone on the AAH website,
+//    intentionally not linked from the app's own nav)
 //  - shows a cleaned activity label (e.g. "Feeding"), not the volunteer's name
 //  - hides "Not Available" blocker entries
 //  - is view-only: no Sign up buttons
@@ -22,11 +23,11 @@ async function loadCalendar(page) {
   await page.waitForSelector('.cal-row');
 }
 
-test('the homepage nav has a Calendar link pointing to calendar.html', async ({ page }) => {
-  await page.goto('/');
-  const link = page.getByRole('link', { name: /^calendar$/i });
-  await expect(link).toBeVisible();
-  await expect(link).toHaveAttribute('href', /calendar\.html/);
+test('calendar.html loads directly, even though it is not linked from the main nav', async ({ page }) => {
+  // Peter embeds this page as a standalone iframe on the AAH website, so the
+  // app's own nav intentionally has no link to it — just confirm the route works.
+  await page.goto('/calendar.html');
+  await expect(page.getByRole('heading', { name: /calendar/i })).toBeVisible();
 });
 
 test('calendar shows cleaned activity labels, not volunteer names', async ({ page }) => {
