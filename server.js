@@ -41,8 +41,22 @@ app.set('trust proxy', 1);
 
 // Security headers. CSP is left off because the pages use inline style
 // attributes and would otherwise break; the other protections (no MIME
-// sniffing, no framing/clickjacking, referrer policy, HSTS) all apply.
-app.use(helmet({ contentSecurityPolicy: false }));
+// sniffing, referrer policy, HSTS) all apply. Frameguard is handled by the
+// middleware below instead, so the calendar can be embedded in the AAH website.
+app.use(helmet({ contentSecurityPolicy: false, frameguard: false }));
+
+// Clickjacking protection everywhere EXCEPT the read-only calendar page,
+// which Peter embeds as an iframe on animalassistedhappiness.org. The
+// calendar has no login, no signup, and no buttons, so framing it is safe.
+app.use((req, res, next) => {
+  const p = req.path.toLowerCase();
+  if (p === '/calendar' || p === '/calendar.html') {
+    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+  } else {
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  }
+  next();
+});
 
 app.use(express.json({ limit: '64kb' }));
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
