@@ -360,10 +360,8 @@ async function loadBanner() {
     const res  = await fetch('/api/message');
     const data = await res.json();
     const bannerEl = document.getElementById('site-banner');
-    if (data.message) {
-      bannerEl.textContent = data.message; // textContent — never rendered as HTML
-      bannerEl.hidden = false;
-    }
+    bannerEl.textContent = data.message || ''; // textContent — never rendered as HTML
+    bannerEl.hidden = !data.message;           // hide again when the cell is cleared
   } catch { /* banner is cosmetic — ignore failures */ }
 }
 

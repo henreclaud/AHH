@@ -502,7 +502,7 @@ async function ensureHeaders() {
 // Normalises a sheet date string to "YYYY-MM-DD" for comparison.
 // Google Sheets may silently reformat dates written as 2026-07-02 into a
 // locale form like 7/2/2026, which breaks exact string matching everywhere
-// (no-show cron, staff report, upcoming-signup lookup).
+// (no-show cron, upcoming-signup lookup).
 function normalizeDateStr(s) {
   s = String(s || '').trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
