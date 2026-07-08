@@ -1582,6 +1582,11 @@ input:focus {
   font-size: 0.78rem;
 }
 
+.signup-phone {
+  color: var(--purple);
+  font-size: 0.78rem;
+}
+
 .signup-unregistered {
   font-size: 0.75rem;
   color: #b45309;
@@ -1740,6 +1745,11 @@ input:focus {
   .masthead-stat  { display: none; }
   .filter-bar     { top: 63px; }
   .shift-grid-compact { grid-template-columns: 1fr; }
+  /* Staff page has one chip per staff member (often 20+), which wraps into
+     many rows. Pinning that whole block while scrolling leaves almost no
+     room for the shift cards on a phone, so let it scroll away normally
+     here instead. The volunteer page keeps the sticky bar — far fewer chips. */
+  .staff-page .filter-bar { position: static; }
 }
 @media (max-width: 520px) {
   .filter-bar-inner { gap: 8px; }

@@ -104,11 +104,6 @@ showGate();
 // ── Page elements ────────────────────────────────────────────────────────────
 const shiftsContainer = document.getElementById('shifts');
 const statusEl        = document.getElementById('status');
-const dialog          = document.getElementById('signup-dialog');
-const signupForm      = document.getElementById('signup-form');
-const dialogTitle     = document.getElementById('dialog-title');
-const formError       = document.getElementById('form-error');
-const cancelButton    = document.getElementById('cancel-button');
 const dateGroup       = document.getElementById('filter-date');
 const typeRow         = document.getElementById('filter-type');
 const resultsCount    = document.getElementById('results-count');
@@ -118,7 +113,6 @@ const statNumber      = document.getElementById('stat-number');
 // ── State ────────────────────────────────────────────────────────────────────
 let allShifts = [];
 let staffList = [];   // [{ name, email }] from the staff tab on the Sheet
-let selectedShiftId = null;
 // filters.type: 'all' or a staff member's email — shifts are matched by the
 // calendar event's guest list, not the title (titles can name several people).
 const filters = { dateRange: 'all', type: 'all' };
@@ -294,7 +288,7 @@ function createCard(shift) {
     // Determine whether this shift is in the future (for ⏳ badge).
     const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local (Pacific) time
 
-    shift.signups.forEach(({ name, email, registered, is_ya, attendance, checkin_time, checkout_time, hours_logged }) => {
+    shift.signups.forEach(({ name, email, phone, registered, is_ya, attendance, checkin_time, checkout_time, hours_logged }) => {
       const li = document.createElement('li');
 
       let attendanceBadge = '';
@@ -315,10 +309,14 @@ function createCard(shift) {
       }
 
       const yaBadge = is_ya ? '<span class="ya-badge">🌟 Youth Ambassador</span>' : '';
+      const phoneHtml = phone
+        ? `<a class="signup-phone" href="tel:${encodeURIComponent(phone)}">${escapeHtml(phone)}</a>`
+        : '';
       li.innerHTML = `
         <div class="signup-row">
           <span class="signup-name">${escapeHtml(name)}</span>
           <a class="signup-email" href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>
+          ${phoneHtml}
           ${attendanceBadge}
           ${yaBadge}
         </div>
@@ -359,18 +357,6 @@ function createCard(shift) {
 
     card.appendChild(staffBlock);
   }
-
-  // Sign-up button
-  const btn = document.createElement('button');
-  btn.className = 'btn btn-primary scard-btn';
-  if (shift.is_full) {
-    btn.textContent = 'Full';
-    btn.disabled = true;
-  } else {
-    btn.textContent = 'Sign up';
-    btn.addEventListener('click', () => openSignup(shift));
-  }
-  card.appendChild(btn);
 
   return card;
 }
@@ -419,45 +405,6 @@ clearButton.addEventListener('click', () => {
   typeRow.querySelectorAll('.chip').forEach(c =>
     c.classList.toggle('active', c.dataset.type === 'all'));
   render();
-});
-
-// ── Signup dialog ─────────────────────────────────────────────────────────────
-function openSignup(shift) {
-  selectedShiftId = shift.id;
-  dialogTitle.textContent = shift.title;
-  formError.textContent = '';
-  signupForm.reset();
-  signupForm.querySelector('button[type="submit"]').disabled = false;
-  dialog.showModal();
-}
-
-cancelButton.addEventListener('click', () => dialog.close());
-
-signupForm.addEventListener('submit', async e => {
-  e.preventDefault();
-  formError.textContent = '';
-  const name  = document.getElementById('name').value.trim();
-  const email = document.getElementById('email').value.trim();
-
-  if (!/\S+\s+\S+/.test(name)) {
-    formError.textContent = 'Please enter your first and last name.';
-    return;
-  }
-
-  try {
-    const res  = await fetch(`/api/shifts/${selectedShiftId}/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email }),
-    });
-    const data = await res.json();
-    if (!res.ok) { formError.textContent = data.error || 'Something went wrong.'; return; }
-    dialog.close();
-    await loadShifts();
-    alert(data.message);
-  } catch {
-    formError.textContent = 'Sorry, something went wrong. Please try again.';
-  }
 });
 
 // ── Date helpers ──────────────────────────────────────────────────────────────

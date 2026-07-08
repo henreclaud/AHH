@@ -641,12 +641,27 @@ async function getShiftById(id) {
 async function getAdminShifts() {
   const [shifts, signups] = await Promise.all([getCachedShifts(), getAllSignups()]);
 
+  // Phone numbers live in the registered volunteers tab, keyed by email.
+  // Non-fatal — a lookup failure just means phones are omitted, same as the
+  // existing registration/YA check. This data is staff-only: getAdminShifts
+  // is only ever exposed through the authenticated /api/staff/shifts route.
+  let phoneByEmail = new Map();
+  try {
+    const regMap = await getRegisteredEmails();
+    for (const [email, info] of regMap) {
+      if (info.phone) phoneByEmail.set(email, info.phone);
+    }
+  } catch (err) {
+    console.warn('[admin] could not load phone numbers:', err.message);
+  }
+
   // Group signup rows by shift_id.
   const byShift = {};
   for (const s of signups) {
     (byShift[s.shift_id] = byShift[s.shift_id] || []).push({
       name: s.name, email: s.email, registered: s.registered,
       is_ya: s.registered === 'YA',
+      phone: phoneByEmail.get(s.email.toLowerCase()) || '',
       attendance: s.attendance, signup_id: s.signup_id,
       checkin_time: s.checkin_time, checkout_time: s.checkout_time, hours_logged: s.hours_logged,
     });
@@ -664,7 +679,7 @@ async function getAdminShifts() {
 // ── Registered volunteers cache ───────────────────────────────────────────────
 //
 // The "registered volunteers" tab holds approved volunteer emails plus flags.
-// Cache: Map<lowercaseEmail, { registered: true, is_ya: boolean }>
+// Cache: Map<lowercaseEmail, { registered: true, is_ya: boolean, phone: string }>
 // Binary search is no longer needed — Map lookup is O(1).
 
 let _regCache      = null;   // Map<email, { registered, is_ya }>
@@ -685,11 +700,13 @@ async function getRegisteredEmails() {
   const rows = res.data.values || [];
   if (!rows.length) { _regCache = new Map(); _regExpiresAt = Date.now() + REG_CACHE_MS; return _regCache; }
 
-  // First row is the header — find the email column (col A, index 0) and the
-  // "Youth Ambassador" column (case-insensitive header match).
+  // First row is the header — find the email column (col A, index 0), the
+  // "Youth Ambassador" column, and the phone column (all case-insensitive
+  // header matches).
   const headers  = rows[0].map(h => (h || '').trim().toLowerCase());
   const emailIdx = headers.findIndex(h => h === 'email' || h.includes('@') || h === 'emails');
   const yaIdx    = headers.findIndex(h => h.includes('youth') || h.includes('ambassador') || h === 'ya');
+  const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('mobile'));
 
   // Fall back to column A for email if header not found.
   const eIdx = emailIdx >= 0 ? emailIdx : 0;
@@ -700,7 +717,8 @@ async function getRegisteredEmails() {
     if (!email || !email.includes('@')) continue;
     const yaVal = yaIdx >= 0 ? (rows[i][yaIdx] || '').trim() : '';
     const is_ya = yaVal === '1' || yaVal.toLowerCase() === 'true';
-    map.set(email, { registered: true, is_ya });
+    const phone = phoneIdx >= 0 ? (rows[i][phoneIdx] || '').trim() : '';
+    map.set(email, { registered: true, is_ya, phone });
   }
 
   _regCache     = map;
