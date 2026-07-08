@@ -119,21 +119,40 @@ const publicApiLimiter = rateLimit({
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 // Token-based auth for the Staff page.
-// Tokens are random 32-byte hex strings kept in memory; they expire on server
-// restart (deploy), requiring a re-login.  Passwords are read from the "pwd"
-// tab on the Google Sheet so Peter can update them without a code change.
+// Tokens are random 32-byte hex strings mapped to an expiry time, kept in
+// memory. A session also ends early on server restart (deploy). Passwords
+// are read from the "pwd" tab on the Google Sheet so Peter can update them
+// without a code change.
 
-const staffTokens = new Set();
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours — a shared login stays
+                                             // valid for at most a workday,
+                                             // so a leaked/stolen token has a
+                                             // short shelf life instead of an
+                                             // indefinite one.
 
-function makeRequireRole(tokenSet) {
+const staffTokens = new Map(); // token -> expiry (epoch ms)
+
+function makeRequireRole(tokenMap) {
   return function (req, res, next) {
-    const header = req.headers['authorization'] || '';
-    const token  = header.startsWith('Bearer ') ? header.slice(7) : '';
-    if (token && tokenSet.has(token)) return next();
+    const header  = req.headers['authorization'] || '';
+    const token   = header.startsWith('Bearer ') ? header.slice(7) : '';
+    const expires = token && tokenMap.get(token);
+    if (expires && expires > Date.now()) return next();
+    if (expires) tokenMap.delete(token); // lazy cleanup of an expired token
     res.status(401).json({ error: 'Unauthorized' });
   };
 }
 const requireStaff = makeRequireRole(staffTokens);
+
+// Periodic sweep so expired sessions don't linger in memory forever if
+// nobody ever retries them. Unref'd so it never keeps the process (or a
+// test run) alive on its own.
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, expires] of staffTokens) {
+    if (expires <= now) staffTokens.delete(token);
+  }
+}, 60 * 60 * 1000).unref();
 
 // Length-safe constant-time string comparison — avoids leaking the password
 // via response timing. Returns false for any length mismatch.
@@ -146,7 +165,7 @@ function constantTimeEquals(a, b) {
 
 // Shared login helper — looks up the password for `role` in the sheet and
 // issues a token if it matches.
-async function handleLogin(role, tokenSet, supplied, res) {
+async function handleLogin(role, tokenMap, supplied, res) {
   if (!supplied) {
     return res.status(400).json({ error: 'Password is required.' });
   }
@@ -167,7 +186,7 @@ async function handleLogin(role, tokenSet, supplied, res) {
     return res.status(401).json({ error: 'Incorrect password. Try again.' });
   }
   const token = crypto.randomBytes(32).toString('hex');
-  tokenSet.add(token);
+  tokenMap.set(token, Date.now() + SESSION_TTL_MS);
   console.log(`[auth] ${role} login successful`);
   res.json({ token });
 }
