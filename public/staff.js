@@ -274,7 +274,11 @@ function createCard(shift) {
 
   const signupHeading = document.createElement('p');
   signupHeading.className = 'scard-signups-heading';
-  signupHeading.textContent = `Signups (${(shift.signups || []).length})`;
+  const signupCount = (shift.signups || []).length;
+  const yaCount      = (shift.signups || []).filter(s => s.is_ya).length;
+  signupHeading.textContent = yaCount
+    ? `Signups (${signupCount}) · ${yaCount} YA`
+    : `Signups (${signupCount})`;
   signupSection.appendChild(signupHeading);
 
   if (!shift.signups || shift.signups.length === 0) {
@@ -314,7 +318,7 @@ function createCard(shift) {
         : '';
       li.innerHTML = `
         <div class="signup-row">
-          <span class="signup-name">${escapeHtml(name)}</span>
+          <span class="signup-name">${escapeHtml(name)}${is_ya ? ' <span class="ya-inline">(YA)</span>' : ''}</span>
           <a class="signup-email" href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>
           ${phoneHtml}
           ${attendanceBadge}

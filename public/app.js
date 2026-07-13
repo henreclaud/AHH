@@ -188,16 +188,19 @@ function createCard(shift) {
     card.appendChild(desc);
   }
 
-  // Sign-up button — only for events with a volunteer limit
+  // Sign-up button. A "full" shift still needs to stay clickable — Youth
+  // Ambassadors don't count against the spot limit, so the server accepts
+  // their signup even at 0 spots left. We can't tell who's a YA until they
+  // submit the form (their email is checked against the registered-volunteers
+  // sheet), so the button must let anyone try; the server does the real gating.
   const btn = document.createElement('button');
   btn.className = 'btn btn-primary scard-btn';
   if (shift.has_limit && shift.is_full) {
-    btn.textContent = 'Full';
-    btn.disabled = true;
+    btn.textContent = 'Full — Youth Ambassadors may still sign up';
   } else {
     btn.textContent = 'Sign up';
-    btn.addEventListener('click', () => openSignup(shift));
   }
+  btn.addEventListener('click', () => openSignup(shift));
   card.appendChild(btn);
 
   return card;

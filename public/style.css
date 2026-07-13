@@ -1604,6 +1604,12 @@ input:focus {
   white-space: nowrap;
 }
 
+.ya-inline {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #7c3aed;
+}
+
 .signup-hours {
   font-size: 0.75rem;
   color: var(--ink-soft, #555);
