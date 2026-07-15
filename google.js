@@ -289,17 +289,38 @@ async function refreshCalendarCache() {
     // Skip events that are already full — they're at capacity and not available.
     if (/\bfull\b/i.test(rawTitle)) continue;
 
-    // A title wrapped entirely in { } marks the event as staff-only (hidden from volunteers).
-    const staff_only = rawTitle.startsWith('{');
-    const titleRaw   = staff_only ? rawTitle.replace(/^\{|\}$/g, '').trim() : rawTitle;
+    // Braces in the title mark hidden content, same idea as in the description:
+    //   - A title wrapped ENTIRELY in { } (starts with { AND ends with })
+    //     hides the whole event from volunteers. Staff see the inner text.
+    //     e.g. "{Bake Sale -- Harshini & Jeeva}" → event hidden from volunteers;
+    //     staff see "Bake Sale -- Harshini & Jeeva".
+    //   - Braces around just PART of the title hide only that part from
+    //     volunteers; staff still see the full title with braces removed.
+    //     e.g. "{Eric - }Feeding 715-815" → volunteers see "Feeding 715-815";
+    //     staff see "Eric - Feeding 715-815".
+    const staff_only = rawTitle.startsWith('{') && rawTitle.endsWith('}');
+    const titleStaff = staff_only
+      ? rawTitle.slice(1, -1).trim()               // whole-hide: unwrap the outer braces
+      : rawTitle.replace(/\{([\s\S]*?)\}/g, '$1').trim(); // partial: keep the hidden text for staff
+    const titleVolunteer = staff_only
+      ? titleStaff                                  // irrelevant — event is hidden from volunteers anyway
+      : rawTitle.replace(/\{[\s\S]*?\}/g, '').trim(); // partial: drop the hidden text entirely
 
     // Try to get shift name from title; skip all-day/untitled events with no usable name.
-    const name = parseShiftName(titleRaw);
+    // Capacity and category are derived from the staff (fully unwrapped) title so
+    // that redacting a name from the volunteer view never changes the spot count
+    // or the activity type.
+    const name = parseShiftName(titleStaff);
     if (!name) continue;
+
+    // If redacting the braced text leaves nothing for volunteers to see, treat
+    // the event as staff-only rather than showing a blank/broken title.
+    const nameVolunteer = parseShiftName(titleVolunteer) || name;
+    const hideFromVolunteers = staff_only || !parseShiftName(titleVolunteer);
 
     // Look for a capacity limit in the title first, then the description.
     // If neither has one, capacity is null — no limit is shown in the UI.
-    const capacity = parseCapacity(titleRaw) ?? parseCapacity(desc) ?? null;
+    const capacity = parseCapacity(titleStaff) ?? parseCapacity(desc) ?? null;
     const has_limit = capacity !== null;
 
     // Google Calendar sends dateTime for timed events and date for all-day events.
@@ -312,7 +333,8 @@ async function refreshCalendarCache() {
 
     shifts.push({
       id:         event.id,        // Google Calendar event ID — stable, unique
-      title:      name,
+      title:      name,            // full (staff-facing) title — used internally
+      title_volunteer: nameVolunteer, // swapped in for `title` on the public endpoint
       icon,
       category,
       location:   (event.location || '').trim(),
@@ -321,7 +343,7 @@ async function refreshCalendarCache() {
       end_time:   toHHMM(endDt),
       capacity:  has_limit ? capacity : 999999, // unlimited events never fill up
       has_limit,
-      staff_only,
+      staff_only: hideFromVolunteers,
       // Invited guests on the calendar event — used to match staff assignments.
       // We go by the guest list rather than the event title because titles can
       // mention several people and aren't reliable.
@@ -621,7 +643,9 @@ async function getShifts() {
     .filter(s => !s.staff_only)                    // { }-wrapped title = staff-only event
     .filter(s => !/^hide\b/i.test(s.title || '')) // HIDE- prefix = staff-only event
     // attendees are staff emails — never expose them on the public endpoint.
-    .map(({ description_staff, staff_only, attendees, ...pub }) => pub);
+    // title_volunteer replaces title here (redacted braced text, if any).
+    .map(({ description_staff, staff_only, attendees, title, title_volunteer, ...pub }) =>
+      ({ ...pub, title: title_volunteer ?? title }));
 }
 
 // Returns all upcoming shifts for the staff page, including both description
