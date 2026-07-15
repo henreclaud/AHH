@@ -580,11 +580,11 @@ async function getUpcomingSignupsByEmail(email) {
   const signups = await getAllSignups();
   const norm    = (email || '').trim().toLowerCase();
 
-  // Staff contact per shift — intersect the calendar event's guest list with
-  // the staff tab, so volunteers can email whoever is running their visit.
-  // Only emails that appear in the staff tab are ever exposed here.
-  // Non-fatal: if this lookup fails the signups still come back, just without contacts.
-  const shiftStaff = {};
+  // Staff contact, location, and volunteer-facing description per shift —
+  // joined in from the calendar event by shift ID, same fields already shown
+  // on the main volunteer page. Non-fatal: if this lookup fails the signups
+  // still come back, just without these extras.
+  const shiftInfo = {};
   try {
     const [shifts, staff] = await Promise.all([getCachedShifts(), getStaffList()]);
     const nameByEmail = new Map(staff.filter(p => p.email).map(p => [p.email, p.name]));
@@ -592,10 +592,14 @@ async function getUpcomingSignupsByEmail(email) {
       const contacts = (shift.attendees || [])
         .filter(a => nameByEmail.has(a.email))
         .map(a => ({ name: nameByEmail.get(a.email), email: a.email }));
-      if (contacts.length) shiftStaff[shift.id] = contacts;
+      shiftInfo[shift.id] = {
+        staff_contacts: contacts,
+        location: shift.location || '',
+        description_volunteers: shift.description_volunteers || null,
+      };
     }
   } catch (err) {
-    console.warn('[signups] staff contact lookup failed:', err.message);
+    console.warn('[signups] shift info lookup failed:', err.message);
   }
 
   return signups
@@ -605,14 +609,19 @@ async function getUpcomingSignupsByEmail(email) {
       s.attendance !== 'Attended' &&
       s.attendance !== 'No-show'
     )
-    .map(s => ({
-      signup_id:  s.signup_id,
-      name:       s.name,
-      shift_name: s.shift_name,
-      shift_date: s.shift_date,
-      shift_time: s.shift_time,
-      staff_contacts: shiftStaff[s.shift_id] || [],
-    }));
+    .map(s => {
+      const info = shiftInfo[s.shift_id] || {};
+      return {
+        signup_id:  s.signup_id,
+        name:       s.name,
+        shift_name: s.shift_name,
+        shift_date: s.shift_date,
+        shift_time: s.shift_time,
+        staff_contacts: info.staff_contacts || [],
+        location: info.location || '',
+        description_volunteers: info.description_volunteers || null,
+      };
+    });
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────

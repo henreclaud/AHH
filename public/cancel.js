@@ -96,6 +96,53 @@ function buildList(signups) {
       <p class="cancel-signup-when">${escapeHtml(signup.shift_name)} on ${escapeHtml(formatDate(signup.shift_date))} at ${escapeHtml(signup.shift_time)}</p>
     `;
 
+    // Location (Google Maps link) — same treatment as the main volunteer page.
+    if (signup.location) {
+      const loc = document.createElement('a');
+      loc.className = 'scard-loc';
+      loc.href = 'https://www.google.com/maps/search/?api=1&query=' +
+                 encodeURIComponent(signup.location);
+      loc.target = '_blank';
+      loc.rel = 'noopener';
+      loc.textContent = signup.location;
+      info.appendChild(loc);
+    }
+
+    // Volunteer-facing description, with the same show-more toggle as the
+    // main volunteer page for long text.
+    if (signup.description_volunteers) {
+      const PREVIEW_CHARS = 120;
+      const full = sanitizeHtml(signup.description_volunteers);
+      const needsToggle = signup.description_volunteers.length > PREVIEW_CHARS;
+
+      const desc = document.createElement('div');
+      desc.className = 'scard-desc';
+
+      if (!needsToggle) {
+        desc.innerHTML = full;
+      } else {
+        const preview = sanitizeHtml(signup.description_volunteers.slice(0, PREVIEW_CHARS).trimEnd()) + '…';
+        const textEl = document.createElement('span');
+        textEl.innerHTML = preview;
+
+        const toggle = document.createElement('button');
+        toggle.className = 'scard-desc-toggle';
+        toggle.textContent = 'Show more';
+        let expanded = false;
+        toggle.addEventListener('click', () => {
+          expanded = !expanded;
+          textEl.innerHTML = expanded ? full : preview;
+          toggle.textContent = expanded ? 'Show less' : 'Show more';
+        });
+
+        desc.appendChild(textEl);
+        desc.appendChild(document.createElement('br'));
+        desc.appendChild(toggle);
+      }
+
+      info.appendChild(desc);
+    }
+
     // Email-the-staff button — opens a pre-addressed email to whoever is
     // running this visit (from the calendar guest list), so volunteers can
     // report a change or delay. Mirrors the staff page's "Notify volunteers".
