@@ -289,22 +289,24 @@ async function refreshCalendarCache() {
     // Skip events that are already full — they're at capacity and not available.
     if (/\bfull\b/i.test(rawTitle)) continue;
 
-    // Braces in the title mark hidden content, same idea as in the description:
-    //   - A title wrapped ENTIRELY in { } (starts with { AND ends with })
-    //     hides the whole event from volunteers. Staff see the inner text.
-    //     e.g. "{Bake Sale -- Harshini & Jeeva}" → event hidden from volunteers;
-    //     staff see "Bake Sale -- Harshini & Jeeva".
-    //   - Braces around just PART of the title hide only that part from
-    //     volunteers; staff still see the full title with braces removed.
-    //     e.g. "{Eric - }Feeding 715-815" → volunteers see "Feeding 715-815";
-    //     staff see "Eric - Feeding 715-815".
-    const staff_only = rawTitle.startsWith('{') && rawTitle.endsWith('}');
-    const titleStaff = staff_only
-      ? rawTitle.slice(1, -1).trim()               // whole-hide: unwrap the outer braces
-      : rawTitle.replace(/\{([\s\S]*?)\}/g, '$1').trim(); // partial: keep the hidden text for staff
-    const titleVolunteer = staff_only
-      ? titleStaff                                  // irrelevant — event is hidden from volunteers anyway
-      : rawTitle.replace(/\{[\s\S]*?\}/g, '').trim(); // partial: drop the hidden text entirely
+    // Braces in the title mark hidden content, same idea as in the description.
+    // Removing every { ... } block (there can be more than one) tells us
+    // whether there's any real text left over for volunteers:
+    //   - Nothing left  → the whole title was hidden content, so the whole
+    //     event is hidden from volunteers. Staff see it all, unwrapped.
+    //     e.g. "{Bake Sale -- Harshini & Jeeva}" → event hidden from
+    //     volunteers; staff see "Bake Sale -- Harshini & Jeeva".
+    //   - Something left → only the braced parts are hidden; volunteers see
+    //     the remaining text, staff see everything (braces removed, content kept).
+    //     e.g. "{Eric - }Feeding 715-815" → volunteers see "Feeding 715-815".
+    //     e.g. "{Note} Feeding 9am {other note}" → volunteers see "Feeding 9am"
+    //     — a title can have more than one hidden block and stay visible.
+    // (Checking only startsWith('{') && endsWith('}') was wrong: a title like
+    // the second example above also starts/ends with a brace, which used to
+    // hide the whole event even though real text sits in the middle.)
+    const titleVolunteer = rawTitle.replace(/\{[\s\S]*?\}/g, '').trim();
+    const staff_only      = titleVolunteer === '';
+    const titleStaff      = rawTitle.replace(/\{([\s\S]*?)\}/g, '$1').trim();
 
     // Try to get shift name from title; skip all-day/untitled events with no usable name.
     // Capacity and category are derived from the staff (fully unwrapped) title so
