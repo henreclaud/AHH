@@ -740,7 +740,10 @@ async function getRegisteredEmails() {
   // header matches).
   const headers  = rows[0].map(h => (h || '').trim().toLowerCase());
   const emailIdx = headers.findIndex(h => h === 'email' || h.includes('@') || h === 'emails');
-  const yaIdx    = headers.findIndex(h => h.includes('youth') || h.includes('ambassador') || h === 'ya');
+  // "ambassador" (not the broader "youth") — Peter's sheet now also has a
+  // separate "Youth Volunteer" column, which the old "youth" substring check
+  // would have matched first, silently binding YA status to the wrong column.
+  const yaIdx    = headers.findIndex(h => h.includes('ambassador') || h === 'ya');
   const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('mobile'));
 
   // Fall back to column A for email if header not found.
