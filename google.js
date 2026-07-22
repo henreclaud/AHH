@@ -677,26 +677,27 @@ async function getAdminShifts() {
   const [shifts, signups] = await Promise.all([getCachedShifts(), getAllSignups()]);
 
   // Phone numbers live in the registered volunteers tab, keyed by email.
-  // Non-fatal — a lookup failure just means phones are omitted, same as the
+  // Non-fatal — a lookup failure just means these are omitted, same as the
   // existing registration/YA check. This data is staff-only: getAdminShifts
   // is only ever exposed through the authenticated /api/staff/shifts route.
-  let phoneByEmail = new Map();
+  let infoByEmail = new Map();
   try {
-    const regMap = await getRegisteredEmails();
-    for (const [email, info] of regMap) {
-      if (info.phone) phoneByEmail.set(email, info.phone);
-    }
+    infoByEmail = await getRegisteredEmails();
   } catch (err) {
-    console.warn('[admin] could not load phone numbers:', err.message);
+    console.warn('[admin] could not load volunteer info:', err.message);
   }
 
   // Group signup rows by shift_id.
   const byShift = {};
   for (const s of signups) {
+    const info = infoByEmail.get(s.email.toLowerCase()) || {};
     (byShift[s.shift_id] = byShift[s.shift_id] || []).push({
       name: s.name, email: s.email, registered: s.registered,
       is_ya: s.registered === 'YA',
-      phone: phoneByEmail.get(s.email.toLowerCase()) || '',
+      phone: info.phone || '',
+      is_adult: !!info.is_adult,
+      is_youth: !!info.is_youth,
+      is_corporate: !!info.is_corporate,
       attendance: s.attendance, signup_id: s.signup_id,
       checkin_time: s.checkin_time, checkout_time: s.checkout_time, hours_logged: s.hours_logged,
     });
@@ -745,6 +746,11 @@ async function getRegisteredEmails() {
   // would have matched first, silently binding YA status to the wrong column.
   const yaIdx    = headers.findIndex(h => h.includes('ambassador') || h === 'ya');
   const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('mobile'));
+  // "youth" but not "ambassador" — Peter's sheet has a separate "Youth
+  // Volunteer" column distinct from "Youth Ambassador".
+  const adultIdx = headers.findIndex(h => h.includes('adult'));
+  const youthIdx = headers.findIndex(h => h.includes('youth') && !h.includes('ambassador'));
+  const corpIdx  = headers.findIndex(h => h.includes('corp'));
 
   // Fall back to column A for email if header not found.
   const eIdx = emailIdx >= 0 ? emailIdx : 0;
@@ -753,10 +759,13 @@ async function getRegisteredEmails() {
   for (let i = 1; i < rows.length; i++) {
     const email = (rows[i][eIdx] || '').trim().toLowerCase();
     if (!email || !email.includes('@')) continue;
-    const yaVal = yaIdx >= 0 ? (rows[i][yaIdx] || '').trim() : '';
-    const is_ya = yaVal === '1' || yaVal.toLowerCase() === 'true';
+    const truthy = idx => idx >= 0 && ['1', 'true'].includes((rows[i][idx] || '').trim().toLowerCase());
+    const is_ya = truthy(yaIdx);
     const phone = phoneIdx >= 0 ? (rows[i][phoneIdx] || '').trim() : '';
-    map.set(email, { registered: true, is_ya, phone });
+    const is_adult    = truthy(adultIdx);
+    const is_youth    = truthy(youthIdx);
+    const is_corporate = truthy(corpIdx);
+    map.set(email, { registered: true, is_ya, phone, is_adult, is_youth, is_corporate });
   }
 
   _regCache     = map;

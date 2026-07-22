@@ -275,9 +275,15 @@ function createCard(shift) {
   const signupHeading = document.createElement('p');
   signupHeading.className = 'scard-signups-heading';
   const signupCount = (shift.signups || []).length;
-  const yaCount      = (shift.signups || []).filter(s => s.is_ya).length;
-  signupHeading.textContent = yaCount
-    ? `Signups (${signupCount}) · ${yaCount} YA`
+  const typeCounts = [
+    ['YA',       s => s.is_ya],
+    ['Adult',    s => s.is_adult],
+    ['Youth',    s => s.is_youth],
+    ['Corporate', s => s.is_corporate],
+  ].map(([label, test]) => [label, (shift.signups || []).filter(test).length])
+   .filter(([, count]) => count > 0);
+  signupHeading.textContent = typeCounts.length
+    ? `Signups (${signupCount}) · ${typeCounts.map(([label, count]) => `${count} ${label}`).join(' · ')}`
     : `Signups (${signupCount})`;
   signupSection.appendChild(signupHeading);
 
@@ -292,7 +298,7 @@ function createCard(shift) {
     // Determine whether this shift is in the future (for ⏳ badge).
     const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local (Pacific) time
 
-    shift.signups.forEach(({ name, email, phone, registered, is_ya, attendance, checkin_time, checkout_time, hours_logged }) => {
+    shift.signups.forEach(({ name, email, phone, registered, is_ya, is_adult, is_youth, is_corporate, attendance, checkin_time, checkout_time, hours_logged }) => {
       const li = document.createElement('li');
 
       let attendanceBadge = '';
@@ -316,9 +322,18 @@ function createCard(shift) {
       const phoneHtml = phone
         ? `<a class="signup-phone" href="tel:${encodeURIComponent(phone)}">${escapeHtml(phone)}</a>`
         : '';
+      // Youth Ambassador already gets its own (YA) marker + badge above; these
+      // three are separate, non-overlapping designations from the registered
+      // volunteers sheet (a person could in principle match more than one).
+      const typeMarkers = [
+        is_ya        && '(YA)',
+        is_adult     && '(A)',
+        is_youth     && '(Y)',
+        is_corporate && '(C)',
+      ].filter(Boolean).join(' ');
       li.innerHTML = `
         <div class="signup-row">
-          <span class="signup-name">${escapeHtml(name)}${is_ya ? ' <span class="ya-inline">(YA)</span>' : ''}</span>
+          <span class="signup-name">${escapeHtml(name)}${typeMarkers ? ` <span class="ya-inline">${typeMarkers}</span>` : ''}</span>
           <a class="signup-email" href="mailto:${encodeURIComponent(email)}">${escapeHtml(email)}</a>
           ${phoneHtml}
           ${attendanceBadge}
