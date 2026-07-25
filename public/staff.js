@@ -426,6 +426,33 @@ clearButton.addEventListener('click', () => {
   render();
 });
 
+// ── Hide filter bar on scroll-down, show it again on scroll-up ─────────────────
+// With one chip per staff member, the sticky filter bar can wrap into several
+// rows and permanently eat a big chunk of the screen. Sliding it out of the
+// way while scrolling down (and back in on scroll-up, or near the very top)
+// keeps filters reachable without them hogging space while browsing shifts.
+{
+  const filterBarEl = document.getElementById('filter-bar');
+  let lastScrollY = window.scrollY;
+  let ticking = false;
+
+  function updateFilterBarVisibility() {
+    const currentY = window.scrollY;
+    const scrolledDown = currentY > lastScrollY;
+    const pastThreshold = currentY > 80; // stay visible near the very top
+    filterBarEl.classList.toggle('filter-bar-hidden', scrolledDown && pastThreshold);
+    lastScrollY = currentY;
+    ticking = false;
+  }
+
+  window.addEventListener('scroll', () => {
+    if (!ticking) {
+      requestAnimationFrame(updateFilterBarVisibility);
+      ticking = true;
+    }
+  }, { passive: true });
+}
+
 // ── Date helpers ──────────────────────────────────────────────────────────────
 function parseDate(iso)    { const d = new Date(iso + 'T00:00:00'); return isNaN(d) ? null : d; }
 function startOfToday()    { const d = new Date(); d.setHours(0,0,0,0); return d; }

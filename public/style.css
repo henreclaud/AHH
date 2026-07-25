@@ -1223,6 +1223,17 @@ input:focus {
   border-bottom: 1px solid var(--border);
   padding: 10px 0;
 }
+
+/* Staff page has one chip per staff member — with 20+ staff it wraps into
+   several rows and, pinned via position:sticky, permanently eats a big
+   chunk of the screen. Slide it away while scrolling down (more room to see
+   events), and bring it back on scroll-up so filters stay reachable. */
+.staff-page .filter-bar {
+  transition: transform 0.22s ease;
+}
+.staff-page .filter-bar.filter-bar-hidden {
+  transform: translateY(-100%);
+}
 .filter-bar-inner {
   display: flex;
   align-items: center;
@@ -1756,6 +1767,9 @@ input:focus {
      room for the shift cards on a phone, so let it scroll away normally
      here instead. The volunteer page keeps the sticky bar — far fewer chips. */
   .staff-page .filter-bar { position: static; }
+  /* Not sticky here, so the scroll-hide transform would just look broken —
+     the hide-on-scroll behavior below is desktop-only. */
+  .staff-page .filter-bar.filter-bar-hidden { transform: none; }
 }
 @media (max-width: 520px) {
   .filter-bar-inner { gap: 8px; }
