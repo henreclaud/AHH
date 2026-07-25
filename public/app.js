@@ -368,5 +368,30 @@ async function loadBanner() {
   } catch { /* banner is cosmetic — ignore failures */ }
 }
 
+// ── Hide filter bar on scroll-down, show it again on scroll-up ─────────────────
+// Frees up screen space to see shifts while scrolling; filters stay one
+// scroll-up away. Same behavior as the staff page.
+{
+  const filterBarEl = document.getElementById('filter-bar');
+  let lastScrollY = window.scrollY;
+  let ticking = false;
+
+  function updateFilterBarVisibility() {
+    const currentY = window.scrollY;
+    const scrolledDown = currentY > lastScrollY;
+    const pastThreshold = currentY > 80; // stay visible near the very top
+    filterBarEl.classList.toggle('filter-bar-hidden', scrolledDown && pastThreshold);
+    lastScrollY = currentY;
+    ticking = false;
+  }
+
+  window.addEventListener('scroll', () => {
+    if (!ticking) {
+      requestAnimationFrame(updateFilterBarVisibility);
+      ticking = true;
+    }
+  }, { passive: true });
+}
+
 loadShifts();
 loadBanner();

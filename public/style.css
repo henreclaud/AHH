@@ -1224,14 +1224,13 @@ input:focus {
   padding: 10px 0;
 }
 
-/* Staff page has one chip per staff member — with 20+ staff it wraps into
-   several rows and, pinned via position:sticky, permanently eats a big
-   chunk of the screen. Slide it away while scrolling down (more room to see
-   events), and bring it back on scroll-up so filters stay reachable. */
-.staff-page .filter-bar {
+/* Slide the filter bar away while scrolling down (more room to see shifts),
+   and bring it back on scroll-up so filters stay reachable. Applies to both
+   the volunteer and staff pages. */
+.filter-bar {
   transition: transform 0.22s ease;
 }
-.staff-page .filter-bar.filter-bar-hidden {
+.filter-bar.filter-bar-hidden {
   transform: translateY(-100%);
 }
 .filter-bar-inner {
