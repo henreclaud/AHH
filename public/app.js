@@ -64,6 +64,11 @@ function getVisible() {
           if (d.getFullYear() !== today.getFullYear() ||
               d.getMonth()    !== today.getMonth()) return false;
         }
+        if (filters.dateRange === 'nextmonth') {
+          const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+          if (d.getFullYear() !== nextMonth.getFullYear() ||
+              d.getMonth()    !== nextMonth.getMonth()) return false;
+        }
       }
       // Activity type
       if (filters.type === '__other__') {

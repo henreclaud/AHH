@@ -109,13 +109,14 @@ const typeRow         = document.getElementById('filter-type');
 const resultsCount    = document.getElementById('results-count');
 const clearButton     = document.getElementById('clear-filters');
 const statNumber      = document.getElementById('stat-number');
+const searchInput     = document.getElementById('filter-search');
 
 // ── State ────────────────────────────────────────────────────────────────────
 let allShifts = [];
 let staffList = [];   // [{ name, email }] from the staff tab on the Sheet
 // filters.type: 'all' or a staff member's email — shifts are matched by the
 // calendar event's guest list, not the title (titles can name several people).
-const filters = { dateRange: 'all', type: 'all' };
+const filters = { dateRange: 'all', type: 'all', search: '' };
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 async function loadShifts() {
@@ -179,6 +180,7 @@ function getVisible() {
         }
       }
       if (filters.type !== 'all' && !isAssignedTo(s, filters.type)) return false;
+      if (filters.search && !(s.title || '').toLowerCase().includes(filters.search)) return false;
       return true;
     })
     .sort(compareDateTime);
@@ -202,7 +204,7 @@ function render() {
   resultsCount.textContent = total
     ? `Showing ${visible.length} of ${total} visit${total === 1 ? '' : 's'}`
     : '';
-  clearButton.hidden = (filters.dateRange === 'all' && filters.type === 'all');
+  clearButton.hidden = (filters.dateRange === 'all' && filters.type === 'all' && !filters.search);
 }
 
 // ── Card builder ─────────────────────────────────────────────────────────────
@@ -272,8 +274,6 @@ function createCard(shift) {
   const signupSection = document.createElement('div');
   signupSection.className = 'scard-signups';
 
-  const signupHeading = document.createElement('p');
-  signupHeading.className = 'scard-signups-heading';
   const signupCount = (shift.signups || []).length;
   const typeCounts = [
     ['YA',       s => s.is_ya],
@@ -282,19 +282,41 @@ function createCard(shift) {
     ['Corporate', s => s.is_corporate],
   ].map(([label, test]) => [label, (shift.signups || []).filter(test).length])
    .filter(([, count]) => count > 0);
-  signupHeading.textContent = typeCounts.length
+  const headingText = typeCounts.length
     ? `Signups (${signupCount}) · ${typeCounts.map(([label, count]) => `${count} ${label}`).join(' · ')}`
     : `Signups (${signupCount})`;
-  signupSection.appendChild(signupHeading);
 
   if (!shift.signups || shift.signups.length === 0) {
+    const heading = document.createElement('p');
+    heading.className = 'scard-signups-heading';
+    heading.textContent = headingText;
+    signupSection.appendChild(heading);
+
     const none = document.createElement('p');
     none.className = 'scard-signups-empty';
     none.textContent = 'No signups yet.';
     signupSection.appendChild(none);
   } else {
+    // Names take up a lot of space once a shift has many signups — let staff
+    // collapse the list away while still seeing the counts. Starts expanded
+    // (unchanged default); collapsed state is per-card, not saved anywhere.
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'scard-signups-heading scard-signups-toggle';
+    const arrow = document.createElement('span');
+    arrow.className = 'scard-signups-arrow';
+    arrow.textContent = '▾';
+    toggle.textContent = headingText + ' ';
+    toggle.appendChild(arrow);
+    signupSection.appendChild(toggle);
+
     const list = document.createElement('ul');
     list.className = 'scard-signups-list';
+
+    toggle.addEventListener('click', () => {
+      const collapsed = list.hidden = !list.hidden;
+      arrow.textContent = collapsed ? '▸' : '▾';
+    });
     // Determine whether this shift is in the future (for ⏳ badge).
     const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local (Pacific) time
 
@@ -416,9 +438,16 @@ dateGroup.addEventListener('click', e => {
   render();
 });
 
+searchInput.addEventListener('input', () => {
+  filters.search = searchInput.value.trim().toLowerCase();
+  render();
+});
+
 clearButton.addEventListener('click', () => {
   filters.dateRange = 'all';
   filters.type = 'all';
+  filters.search = '';
+  searchInput.value = '';
   dateGroup.querySelectorAll('.seg').forEach(b =>
     b.classList.toggle('active', b.dataset.range === 'all'));
   typeRow.querySelectorAll('.chip').forEach(c =>

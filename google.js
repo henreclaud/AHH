@@ -8,7 +8,7 @@
 
 const crypto = require('crypto');
 const { google } = require('googleapis');
-const { sendUnregisteredAlert } = require('./mailer');
+const { sendUnregisteredAlert, sendNewVolunteerAlert } = require('./mailer');
 
 // ── Environment variables ────────────────────────────────────────────────────
 // GOOGLE_CALENDAR_ID          — the calendar to read shifts from
@@ -751,6 +751,7 @@ async function getRegisteredEmails() {
   const adultIdx = headers.findIndex(h => h.includes('adult'));
   const youthIdx = headers.findIndex(h => h.includes('youth') && !h.includes('ambassador'));
   const corpIdx  = headers.findIndex(h => h.includes('corp'));
+  const hoursIdx = headers.findIndex(h => h.includes('hour'));
 
   // Fall back to column A for email if header not found.
   const eIdx = emailIdx >= 0 ? emailIdx : 0;
@@ -765,12 +766,14 @@ async function getRegisteredEmails() {
     const is_adult    = truthy(adultIdx);
     const is_youth    = truthy(youthIdx);
     const is_corporate = truthy(corpIdx);
-    map.set(email, { registered: true, is_ya, phone, is_adult, is_youth, is_corporate });
+    // Blank cell counts as 0 prior hours (never logged any), not "unknown".
+    const priorHours = hoursIdx >= 0 ? (parseFloat(rows[i][hoursIdx]) || 0) : 0;
+    map.set(email, { registered: true, is_ya, phone, is_adult, is_youth, is_corporate, priorHours });
   }
 
   _regCache     = map;
   _regExpiresAt = Date.now() + REG_CACHE_MS;
-  console.log(`[registered] loaded ${map.size} volunteers (YA col: ${yaIdx >= 0 ? headers[yaIdx] : 'not found'})`);
+  console.log(`[registered] loaded ${map.size} volunteers (YA col: ${yaIdx >= 0 ? headers[yaIdx] : 'not found'}, hours col: ${hoursIdx >= 0 ? headers[hoursIdx] : 'not found'})`);
   return _regCache;
 }
 
@@ -807,11 +810,13 @@ async function createSignup(shiftId, name, email) {
   // Check registration and YA status — non-fatal if the lookup fails.
   let registeredFlag = '';
   let isYA           = false;
+  let priorHours     = null; // null = lookup failed/unknown; don't alert on that
   try {
     const regMap = await getRegisteredEmails();
     const info   = lookupVolunteer(regMap, email);
     registeredFlag = info.registered ? 'Yes' : 'No';
     isYA           = info.is_ya;
+    if (info.registered) priorHours = info.priorHours;
   } catch (err) {
     console.warn('[registered] could not check registration:', err.message);
   }
@@ -862,6 +867,19 @@ async function createSignup(shiftId, name, email) {
       date:      shift.date,
       time:      `${shift.start_time}-${shift.end_time}`,
     }).catch(err => console.warn('[alert] unregistered alert failed:', err.message));
+  }
+
+  // Alert Jonathan when a registered volunteer with 0 prior hours signs up
+  // for anything other than Orientation — likely their first real visit.
+  // priorHours stays null (not 0) when unregistered or the lookup failed, so
+  // this only fires for volunteers actually found in the sheet.
+  if (shift.category !== 'Orientation' && priorHours === 0) {
+    sendNewVolunteerAlert({
+      name, email,
+      shiftName: shift.title,
+      date:      shift.date,
+      time:      `${shift.start_time}-${shift.end_time}`,
+    }).catch(err => console.warn('[alert] new volunteer alert failed:', err.message));
   }
 
   return { ok: true, message: `You're signed up for ${shift.title}. Thank you!`, signupId };

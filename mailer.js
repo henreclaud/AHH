@@ -109,6 +109,36 @@ async function sendReminderEmail({ to, name, shiftName, date, time, location, ca
 }
 
 /**
+ * Send an alert to Jonathan when a registered volunteer with 0 prior hours
+ * signs up for a non-Orientation shift — flagged as likely their first visit.
+ *
+ * @param {object} opts
+ * @param {string} opts.name      Volunteer's full name
+ * @param {string} opts.email     Volunteer's email
+ * @param {string} opts.shiftName Shift title
+ * @param {string} opts.date      "YYYY-MM-DD"
+ * @param {string} opts.time      Shift time string, e.g. "9:00am–11:00am"
+ */
+async function sendNewVolunteerAlert({ name, email, shiftName, date, time }) {
+  const d = new Date(date + 'T12:00:00Z');
+  const prettyDate = d.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+
+  const text = [
+    `${name} (${email}) just signed up for ${shiftName} on ${prettyDate} at ${time}.`,
+    '',
+    'This volunteer has signed up for a shift but has 0 prior hours.',
+  ].join('\n');
+
+  await sendViaResend({
+    to:      process.env.NEW_VOLUNTEER_ALERT_EMAIL || 'jonathan@aahsmilefarm.org',
+    subject: 'New volunteer signup alert (0 prior hours)',
+    text,
+  });
+}
+
+/**
  * Send an alert to staff when an unregistered volunteer signs up.
  *
  * @param {object} opts
@@ -173,4 +203,4 @@ async function sendConfirmationEmail({ to, name, shiftName, date, time, location
   });
 }
 
-module.exports = { sendReminderEmail, sendUnregisteredAlert, sendConfirmationEmail };
+module.exports = { sendReminderEmail, sendUnregisteredAlert, sendNewVolunteerAlert, sendConfirmationEmail };
