@@ -457,9 +457,21 @@ clearButton.addEventListener('click', () => {
 function parseDate(iso)    { const d = new Date(iso + 'T00:00:00'); return isNaN(d) ? null : d; }
 function startOfToday()    { const d = new Date(); d.setHours(0,0,0,0); return d; }
 function addDays(d, n)     { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+// Minutes-since-midnight from a "9:00am" / "1:30pm" string, for chronological sort.
+// Comparing the raw strings (e.g. "9:00am" vs "11:45am") sorts alphabetically,
+// which puts single-digit hours after double-digit ones — wrong order.
+function toMinutes(t) {
+  const m = String(t).match(/^(\d{1,2}):(\d{2})(am|pm)$/i);
+  if (!m) return 0;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  if (/pm/i.test(m[3]) && h !== 12) h += 12;
+  if (/am/i.test(m[3]) && h === 12) h = 0;
+  return h * 60 + min;
+}
 function compareDateTime(a, b) {
   if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-  return a.start_time < b.start_time ? -1 : a.start_time > b.start_time ? 1 : 0;
+  return toMinutes(a.start_time) - toMinutes(b.start_time);
 }
 function formatDate(iso) {
   const d = parseDate(iso);
