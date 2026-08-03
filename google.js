@@ -766,8 +766,10 @@ async function getRegisteredEmails() {
     const is_adult    = truthy(adultIdx);
     const is_youth    = truthy(youthIdx);
     const is_corporate = truthy(corpIdx);
-    // Blank cell counts as 0 prior hours (never logged any), not "unknown".
-    const priorHours = hoursIdx >= 0 ? (parseFloat(rows[i][hoursIdx]) || 0) : 0;
+    // A blank cell means 0 prior hours (never logged any). But if the sheet
+    // has no hours column at all, priorHours must stay null — defaulting to 0
+    // would make the "0 prior hours" alert fire for every single volunteer.
+    const priorHours = hoursIdx >= 0 ? (parseFloat(rows[i][hoursIdx]) || 0) : null;
     map.set(email, { registered: true, is_ya, phone, is_adult, is_youth, is_corporate, priorHours });
   }
 
