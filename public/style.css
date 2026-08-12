@@ -1424,6 +1424,12 @@ input:focus {
 .scard.is-full {
   opacity: 0.55;
 }
+/* Staff need to read full shifts as clearly as open ones — they're managing
+   them, not deciding whether to sign up. Volunteers keep the dimming as a
+   visual "this one's full" cue. */
+.staff-page .scard.is-full {
+  opacity: 1;
+}
 .scard.is-full:hover {
   transform: none;
   box-shadow: none;
