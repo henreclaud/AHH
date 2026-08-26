@@ -200,8 +200,13 @@ function createCard(shift) {
   // sheet), so the button must let anyone try; the server does the real gating.
   const btn = document.createElement('button');
   btn.className = 'btn btn-primary scard-btn';
-  if (shift.has_limit && shift.is_full) {
-    btn.textContent = 'Full — Youth Ambassadors may still sign up';
+  if (shift.is_full) {
+    // A shift with no "Limit xx" in the title isn't full — it's simply not
+    // open for general signups, so word it differently from a genuinely
+    // filled one. Either way only Youth Ambassadors get through server-side.
+    btn.textContent = shift.has_limit
+      ? 'Full — Youth Ambassadors only'
+      : 'Youth Ambassadors only';
   } else {
     btn.textContent = 'Sign up';
   }

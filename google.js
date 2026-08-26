@@ -343,7 +343,10 @@ async function refreshCalendarCache() {
       date:       toDateStr(startDt),   // "YYYY-MM-DD" in Pacific Time
       start_time: toHHMM(startDt),     // "HH:MM" in Pacific Time
       end_time:   toHHMM(endDt),
-      capacity:  has_limit ? capacity : 999999, // unlimited events never fill up
+      // No "Limit xx" in the title means the shift isn't open for general
+      // signups: treated as 0 slots, so only Youth Ambassadors (who bypass the
+      // capacity check) can sign up. Per Peter, Aug 2026.
+      capacity:  has_limit ? capacity : 0,
       has_limit,
       staff_only: hideFromVolunteers,
       // Invited guests on the calendar event — used to match staff assignments.
@@ -859,7 +862,12 @@ async function createSignup(shiftId, name, email) {
   if (!isYA) {
     const taken = allSignups.filter(s => s.shift_id === shiftId && s.registered !== 'YA').length;
     if (taken >= shift.capacity) {
-      return { ok: false, error: 'Sorry, this shift is now full.' };
+      return {
+        ok: false,
+        error: shift.has_limit
+          ? 'Sorry, this shift is now full.'
+          : 'This shift is only open to Youth Ambassadors.',
+      };
     }
   }
 
