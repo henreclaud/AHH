@@ -627,6 +627,38 @@ async function getUpcomingSignupsByEmail(email) {
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 // Shared helper — adds live spot counts to a list of cached shifts.
+// ── Farm location matching ────────────────────────────────────────────────────
+//
+// Staff write the farm's address on calendar events in whatever form is handy:
+//   "999 E Caribbean Dr"
+//   "999 E Caribbean Dr, Sunnyvale, CA 94089, USA"
+//   "Sunnyvale Baylands Park, 999 E Caribbean Dr, Sunnyvale, CA"
+// The old check required the event's location to *contain* the whole
+// FARM_ADDRESS string, so the short form silently failed — which blocked QR
+// check-in for every volunteer on those shifts ("No active shifts right now").
+//
+// Instead we match on the street line only (the first comma-separated part of
+// FARM_ADDRESS), with punctuation and spacing normalised away.
+function _normalizeAddr(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[.,#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Returns the normalised street line of FARM_ADDRESS, or '' when unset.
+function _farmStreet() {
+  const raw = (process.env.FARM_ADDRESS || '').split(',')[0];
+  return _normalizeAddr(raw);
+}
+
+// True when a shift's calendar location refers to the farm.
+function _isFarmLocation(location, farmStreet) {
+  if (!farmStreet) return false;
+  return _normalizeAddr(location).includes(farmStreet);
+}
+
 // Youth Ambassadors (registered === 'YA') don't count toward the spot limit.
 async function _withCounts(shifts) {
   const signups  = await getAllSignups();
@@ -635,11 +667,11 @@ async function _withCounts(shifts) {
     if (s.registered === 'YA') continue;
     counts[s.shift_id] = (counts[s.shift_id] || 0) + 1;
   }
-  const farmAddr = (process.env.FARM_ADDRESS || '').trim().toLowerCase();
+  const farmStreet = _farmStreet();
   return shifts.map(shift => {
     const taken      = counts[shift.id] || 0;
     const spots_left = Math.max(0, shift.capacity - taken);
-    const is_farm    = farmAddr ? (shift.location || '').toLowerCase().includes(farmAddr) : false;
+    const is_farm    = _isFarmLocation(shift.location, farmStreet);
     return { ...shift, taken, spots_left, is_full: spots_left <= 0, is_farm };
   });
 }
@@ -703,11 +735,11 @@ async function getAdminShifts() {
     });
   }
 
-  const farmAddr = (process.env.FARM_ADDRESS || '').trim().toLowerCase();
+  const farmStreet = _farmStreet();
   return shifts.map(shift => {
     const shiftSignups = byShift[shift.id] || [];
     const spots_left   = Math.max(0, shift.capacity - shiftSignups.length);
-    const is_farm      = farmAddr ? (shift.location || '').toLowerCase().includes(farmAddr) : false;
+    const is_farm      = _isFarmLocation(shift.location, farmStreet);
     return { ...shift, spots_left, is_full: spots_left <= 0, signups: shiftSignups, is_farm };
   });
 }
@@ -1054,14 +1086,15 @@ function formatPacific(date) {
 // Looks up signups for a given email + name on today's date (Pacific time)
 // that are within the check-in window (30 min before start → 30 min after end).
 // Matching on BOTH email and name lets two people sharing an email be tracked separately.
-// Returns a map of calendar event ID → location string for all cached shifts.
-async function _farmLocationMap() {
-  const farmAddr = (process.env.FARM_ADDRESS || '').trim().toLowerCase();
-  if (!farmAddr) return null; // no filter configured — allow all shifts
+// Returns a Set of calendar event IDs that are at the farm, or null when
+// FARM_ADDRESS is unset (no filtering — every shift allows QR check-in).
+async function _farmShiftIds() {
+  const farmStreet = _farmStreet();
+  if (!farmStreet) return null;
   const shifts = await getCachedShifts();
-  const map = {};
-  shifts.forEach(s => { map[s.id] = (s.location || '').toLowerCase(); });
-  return { map, farmAddr };
+  const ids = new Set();
+  shifts.forEach(s => { if (_isFarmLocation(s.location, farmStreet)) ids.add(s.id); });
+  return ids;
 }
 
 async function getTodaySignupsForPerson(email, name) {
@@ -1075,8 +1108,8 @@ async function getTodaySignupsForPerson(email, name) {
   );
 
   // When FARM_ADDRESS is set, restrict QR check-in to farm-location shifts only.
-  const loc = await _farmLocationMap();
-  if (loc) results = results.filter(s => (loc.map[s.shift_id] || '').includes(loc.farmAddr));
+  const farmIds = await _farmShiftIds();
+  if (farmIds) results = results.filter(s => farmIds.has(s.shift_id));
 
   return results;
 }
@@ -1095,8 +1128,8 @@ async function getTodayCheckoutsForPerson(email, name) {
   );
 
   // Same farm filter — checkouts should also be farm-only.
-  const loc = await _farmLocationMap();
-  if (loc) results = results.filter(s => (loc.map[s.shift_id] || '').includes(loc.farmAddr));
+  const farmIds = await _farmShiftIds();
+  if (farmIds) results = results.filter(s => farmIds.has(s.shift_id));
 
   return results;
 }
