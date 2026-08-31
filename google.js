@@ -1124,12 +1124,20 @@ async function getTodaySignupsForPerson(email, name) {
 
 // Looks up today's signups for a person that have been checked in but not yet checked out.
 // No strict time window for check-out — just needs to be the same day.
-async function getTodayCheckoutsForPerson(email, name) {
+//
+// Match by EMAIL ONLY (name is ignored). Requiring the name to match exactly —
+// as check-in does — made check-out fragile: a parent who signs up kids under
+// their own email could check in under one name and then be unable to check out
+// after typing the name even slightly differently ("No shifts ready to check
+// out"). The other filters (Attended, not-yet-checked-out, today, farm) already
+// narrow this to just the shift(s) this email actually checked in for, so the
+// name adds nothing but a failure mode. Mirrors the cancel page, which is also
+// email-only for the same shared-email-family reason.
+async function getTodayCheckoutsForPerson(email, name) { // eslint-disable-line no-unused-vars
   const today   = todayPacific();
   const signups = await getAllSignups();
   let results = signups.filter(s =>
     s.email.toLowerCase() === email.toLowerCase().trim() &&
-    s.name.toLowerCase()  === name.toLowerCase().trim()  &&
     s.shift_date === today &&
     s.attendance === 'Attended' &&
     !s.checkout_time
