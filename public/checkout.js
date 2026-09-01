@@ -80,7 +80,12 @@ function buildShiftList(signups) {
     const card = document.createElement('div');
     card.className = 'checkin-shift-card card';
 
+    // Show the volunteer's name first: one email can cover a whole family
+    // (a parent signs up their kids under their own email), so a single
+    // check-out lookup can return several people — the name is what lets
+    // them tell the entries apart and check out the right person.
     card.innerHTML = `
+      ${signup.name ? `<p class="checkin-shift-person">${escapeHtml(signup.name)}</p>` : ''}
       <p class="checkin-shift-name">${escapeHtml(signup.shift_name)}</p>
       <p class="checkin-shift-time">${escapeHtml(signup.shift_time)}</p>
       ${signup.checkin_time ? `<p class="checkin-already">🕐 Checked in: ${escapeHtml(signup.checkin_time)}</p>` : ''}
@@ -88,7 +93,9 @@ function buildShiftList(signups) {
 
     const btn = document.createElement('button');
     btn.className   = 'btn btn-primary btn-full checkin-confirm-btn';
-    btn.textContent = 'Check out of this shift';
+    // textContent (not innerHTML) — no escaping needed, and escaping here would
+    // render the entities literally.
+    btn.textContent = signup.name ? `Check out ${signup.name.split(/\s+/)[0]}` : 'Check out of this shift';
     btn.addEventListener('click', () => confirmCheckout(signup, btn));
     card.appendChild(btn);
 

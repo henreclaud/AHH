@@ -1705,6 +1705,13 @@ input:focus {
   gap: 6px;
 }
 
+.checkin-shift-person {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--purple, #5f4bb6);
+  margin: 0 0 2px;
+}
+
 .checkin-shift-name {
   font-weight: 700;
   font-size: 1rem;
