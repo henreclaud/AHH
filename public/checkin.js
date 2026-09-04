@@ -84,7 +84,11 @@ function buildShiftList(signups, email) {
     // Already checked in?
     const alreadyIn = signup.attendance === 'Attended';
 
+    // Lead with the volunteer's name: one email can cover a whole family, so
+    // this lookup can return several people and the name is what lets them
+    // check in the right person.
     card.innerHTML = `
+      ${signup.name ? `<p class="checkin-shift-person">${escapeHtml(signup.name)}</p>` : ''}
       <p class="checkin-shift-name">${escapeHtml(signup.shift_name)}</p>
       <p class="checkin-shift-time">${escapeHtml(signup.shift_time)}</p>
       ${alreadyIn ? '<p class="checkin-already">✅ Already checked in</p>' : ''}
@@ -93,7 +97,10 @@ function buildShiftList(signups, email) {
     if (!alreadyIn) {
       const btn = document.createElement('button');
       btn.className   = 'btn btn-primary btn-full checkin-confirm-btn';
-      btn.textContent = 'Yes, I\'m here for this shift';
+      // textContent — no escaping needed, and escaping would render entities literally.
+      btn.textContent = signup.name
+        ? `Check in ${signup.name.split(/\s+/)[0]}`
+        : "Yes, I'm here for this shift";
       btn.addEventListener('click', () => confirmCheckin(signup, btn));
       card.appendChild(btn);
     }

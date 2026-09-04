@@ -1105,12 +1105,18 @@ async function _farmShiftIds() {
   return ids;
 }
 
-async function getTodaySignupsForPerson(email, name) {
+// Match by EMAIL ONLY (name ignored), same as check-out. Requiring the typed
+// name to equal the signup exactly was breaking real check-ins: signup rows
+// hold things like "Izabel Martins and Cora Pinheiro 9 yo", and any variation
+// — dropping the kid, an extra space, a nickname — returned nothing and showed
+// "No active shifts right now." even though the volunteer was signed up.
+// The remaining filters (today + check-in window + farm) already narrow this to
+// the right shift(s), and the UI lists each person by name to choose from.
+async function getTodaySignupsForPerson(email, name) { // eslint-disable-line no-unused-vars
   const today   = todayPacific();
   const signups = await getAllSignups();
   let results = signups.filter(s =>
     s.email.toLowerCase() === email.toLowerCase().trim() &&
-    s.name.toLowerCase()  === name.toLowerCase().trim()  &&
     s.shift_date === today &&
     isCheckinWindowOpen(s.shift_time)
   );
