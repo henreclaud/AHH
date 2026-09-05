@@ -1091,67 +1091,51 @@ function formatPacific(date) {
   });
 }
 
-// Looks up signups for a given email + name on today's date (Pacific time)
-// that are within the check-in window (30 min before start → 30 min after end).
-// Matching on BOTH email and name lets two people sharing an email be tracked separately.
-// Returns a Set of calendar event IDs that are at the farm, or null when
-// FARM_ADDRESS is unset (no filtering — every shift allows QR check-in).
-async function _farmShiftIds() {
-  const farmStreet = _farmStreet();
-  if (!farmStreet) return null;
-  const shifts = await getCachedShifts();
-  const ids = new Set();
-  shifts.forEach(s => { if (_isFarmLocation(s.location, farmStreet)) ids.add(s.id); });
-  return ids;
-}
-
+// Looks up today's signups (Pacific time) that are within the check-in window
+// (30 min before start → 30 min after end).
+//
 // Match by EMAIL ONLY (name ignored), same as check-out. Requiring the typed
 // name to equal the signup exactly was breaking real check-ins: signup rows
 // hold things like "Izabel Martins and Cora Pinheiro 9 yo", and any variation
 // — dropping the kid, an extra space, a nickname — returned nothing and showed
 // "No active shifts right now." even though the volunteer was signed up.
-// The remaining filters (today + check-in window + farm) already narrow this to
-// the right shift(s), and the UI lists each person by name to choose from.
+// Today + the check-in window already narrow this to the right shift(s), and
+// the UI lists each person by name to choose from.
+//
+// Every event type is eligible — farm, mobile visits and everything else — per
+// Peter (Sep 2026): one sign-up / check-in / check-out process regardless of
+// event type. (Previously FARM_ADDRESS restricted this to farm shifts only.)
 async function getTodaySignupsForPerson(email, name) { // eslint-disable-line no-unused-vars
   const today   = todayPacific();
   const signups = await getAllSignups();
-  let results = signups.filter(s =>
+  return signups.filter(s =>
     s.email.toLowerCase() === email.toLowerCase().trim() &&
     s.shift_date === today &&
     isCheckinWindowOpen(s.shift_time)
   );
-
-  // When FARM_ADDRESS is set, restrict QR check-in to farm-location shifts only.
-  const farmIds = await _farmShiftIds();
-  if (farmIds) results = results.filter(s => farmIds.has(s.shift_id));
-
-  return results;
 }
 
 // Looks up today's signups for a person that have been checked in but not yet checked out.
 // No strict time window for check-out — just needs to be the same day.
 //
-// Match by EMAIL ONLY (name is ignored). Requiring the name to match exactly —
-// as check-in does — made check-out fragile: a parent who signs up kids under
-// their own email could check in under one name and then be unable to check out
-// after typing the name even slightly differently ("No shifts ready to check
-// out"). The other filters (Attended, not-yet-checked-out, today, farm) already
-// narrow this to just the shift(s) this email actually checked in for, so the
-// name adds nothing but a failure mode. Mirrors the cancel page, which is also
-// email-only for the same shared-email-family reason.
+// Match by EMAIL ONLY (name is ignored), for the same reason as check-in: a
+// parent who signs up kids under their own email could check in under one name
+// and then be unable to check out after typing it even slightly differently
+// ("No shifts ready to check out"). The other filters (Attended,
+// not-yet-checked-out, today) already narrow this to just the shift(s) this
+// email actually checked in for, so the name adds nothing but a failure mode.
+// Mirrors the cancel page, which is email-only for the same reason.
+//
+// Every event type is eligible, matching check-in (see above).
 async function getTodayCheckoutsForPerson(email, name) { // eslint-disable-line no-unused-vars
   const today   = todayPacific();
   const signups = await getAllSignups();
-  let results = signups.filter(s =>
+  const results = signups.filter(s =>
     s.email.toLowerCase() === email.toLowerCase().trim() &&
     s.shift_date === today &&
     s.attendance === 'Attended' &&
     !s.checkout_time
   );
-
-  // Same farm filter — checkouts should also be farm-only.
-  const farmIds = await _farmShiftIds();
-  if (farmIds) results = results.filter(s => farmIds.has(s.shift_id));
 
   return results;
 }
