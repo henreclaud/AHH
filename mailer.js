@@ -69,14 +69,18 @@ async function sendReminderEmail({ to, name, shiftName, date, time, location, ca
     day:     'numeric',
   });
 
-  const locationLine = location ? `located at ${location}` : 'at Smile Farm';
+  // Use the event's real address. Previously this fell back to "at Smile Farm"
+  // when no location was known, which told volunteers at off-site events (e.g.
+  // a mobile visit at a school) to go to the farm. Now an unknown location is
+  // simply left out rather than asserting the wrong place.
+  const locationLine = location ? `, located at ${location}` : '';
 
   const subject = 'Reminder: Your upcoming AAH volunteer shift';
 
   const text = [
     `Hi ${name},`,
     '',
-    `This is a reminder that you're signed up for ${shiftName} on ${prettyDate} at ${time}, ${locationLine}.`,
+    `This is a reminder that you're signed up for ${shiftName} on ${prettyDate} at ${time}${locationLine}.`,
     '',
     'We look forward to seeing you!',
     '',
@@ -89,7 +93,7 @@ async function sendReminderEmail({ to, name, shiftName, date, time, location, ca
 <p>Hi ${name},</p>
 <p>
   This is a reminder that you're signed up for <strong>${shiftName}</strong> on
-  <strong>${prettyDate} at ${time}</strong>, ${locationLine}.
+  <strong>${prettyDate} at ${time}</strong>${locationLine}.
 </p>
 <p>We look forward to seeing you!</p>
 <p>

@@ -19,14 +19,15 @@ const { sendReminderEmail } = require('./mailer');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const SHEET_ID  = process.env.GOOGLE_SHEET_ID;
+const SHEET_ID    = process.env.GOOGLE_SHEET_ID;
+const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
 const APP_URL   = (process.env.APP_URL || 'https://ahh-yozo.onrender.com').replace(/\/$/, '');
 const CANCEL_URL = `${APP_URL}/cancel.html`;
 
 // Sheet column layout (0-indexed):
 //  A(0) Timestamp  B(1) Name  C(2) Email  D(3) ShiftID
 //  E(4) ShiftName  F(5) ShiftDate  G(6) ShiftTime  H(7) Signup ID  I(8) Reminded
-const COL = { NAME: 1, EMAIL: 2, SHIFT_NAME: 4, DATE: 5, TIME: 6, REMINDED: 8 };
+const COL = { NAME: 1, EMAIL: 2, SHIFT_ID: 3, SHIFT_NAME: 4, DATE: 5, TIME: 6, REMINDED: 8 };
 const SHEET_RANGE = 'signups!A:I';
 
 // Reminder window: send when the shift is roughly a day away. The window is wide
@@ -46,8 +47,54 @@ function getAuth() {
   catch { creds = JSON.parse(raw.replace(/\\n/g, '\n')); }
   return new google.auth.GoogleAuth({
     credentials: creds,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    scopes: [
+      'https://www.googleapis.com/auth/spreadsheets',
+      // Read-only calendar access so reminders can name the real location.
+      'https://www.googleapis.com/auth/calendar.readonly',
+    ],
   });
+}
+
+// ── Locations ─────────────────────────────────────────────────────────────────
+//
+// The signups sheet doesn't store a location, so reminder emails used to send
+// an empty one and fall back to "at Smile Farm" — wrong for every off-site
+// event (e.g. a mobile visit at a school still read "at Smile Farm").
+// Build a map of calendar event ID → location so each reminder names the
+// actual address. Fails soft: on any error we return an empty map and the
+// email simply omits the location rather than stating a wrong one.
+async function fetchLocationsByEventId(auth) {
+  const map = new Map();
+  if (!CALENDAR_ID) {
+    console.warn('[reminders] GOOGLE_CALENDAR_ID not set — reminders will omit locations.');
+    return map;
+  }
+  try {
+    const calendar = google.calendar({ version: 'v3', auth });
+    const now = new Date();
+    // Reminders only go out for shifts ~1–26 h away; a couple of days of
+    // padding covers the whole window plus any clock skew.
+    let pageToken;
+    do {
+      const res = await calendar.events.list({
+        calendarId:   CALENDAR_ID,
+        timeMin:      new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+        timeMax:      new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000).toISOString(),
+        singleEvents: true,
+        maxResults:   2500,
+        pageToken,
+      });
+      for (const ev of res.data.items || []) {
+        const loc = (ev.location || '').trim();
+        if (loc) map.set(ev.id, loc);
+      }
+      pageToken = res.data.nextPageToken;
+    } while (pageToken);
+    console.log(`[reminders] Loaded locations for ${map.size} upcoming event(s).`);
+  } catch (err) {
+    console.warn('[reminders] Could not read calendar locations:', err.message);
+  }
+  return map;
 }
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
@@ -114,6 +161,7 @@ async function main() {
   }
 
   // ── Check each signup row ─────────────────────────────────────────────────
+  const locationsByEventId = await fetchLocationsByEventId(auth);
   const now = new Date();
   let sent = 0, skipped = 0;
 
@@ -122,6 +170,7 @@ async function main() {
 
     const name      = (row[COL.NAME]       || '').trim();
     const email     = (row[COL.EMAIL]      || '').trim();
+    const shiftId   = (row[COL.SHIFT_ID]   || '').trim();
     const shiftName = (row[COL.SHIFT_NAME] || '').trim();
     const dateStr   = (row[COL.DATE]       || '').trim();
     const timeStr   = (row[COL.TIME]       || '').trim();
@@ -149,7 +198,9 @@ async function main() {
           shiftName,
           date:      dateStr,
           time:      startTime,
-          location:  '', // location not stored in sheet; omit gracefully
+          // Real address from the calendar event. Empty when unknown, which
+          // makes the email omit the location rather than guess at one.
+          location:  locationsByEventId.get(shiftId) || '',
           cancelUrl: CANCEL_URL,
         });
 
