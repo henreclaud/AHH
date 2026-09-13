@@ -134,7 +134,9 @@ function parseShiftStartUTC(dateStr, timeStr) {
 async function main() {
   if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
 
-  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+  // One auth client, reused for both Sheets and the calendar location lookup.
+  const auth   = getAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
 
   // Read all rows including the new Reminded column.
   const res  = await sheets.spreadsheets.values.get({
@@ -161,7 +163,15 @@ async function main() {
   }
 
   // ── Check each signup row ─────────────────────────────────────────────────
-  const locationsByEventId = await fetchLocationsByEventId(auth);
+  // Locations are a nice-to-have: reminders must still go out if this fails.
+  // Guarded at the call site too — an earlier version threw here (undefined
+  // variable) and killed every reminder run for ~17 hours before anyone noticed.
+  let locationsByEventId = new Map();
+  try {
+    locationsByEventId = await fetchLocationsByEventId(auth);
+  } catch (err) {
+    console.warn('[reminders] Location lookup failed; sending without locations:', err.message);
+  }
   const now = new Date();
   let sent = 0, skipped = 0;
 
