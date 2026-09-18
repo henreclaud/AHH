@@ -383,6 +383,17 @@ input:focus {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 18px;
+  flex-wrap: wrap; /* three buttons now — wrap rather than overflow on mobile */
+}
+
+/* Running list of people added during one "add another" sitting. */
+.signup-added {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--purple-xsoft, #f2f0fb);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--ink);
 }
 
 .form-error {
@@ -1575,6 +1586,18 @@ input:focus {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* Sub-group label inside a signup list (Helper vs New on Orientation shifts). */
+.scard-signups-subheading {
+  margin: 10px 0 4px;
+  font-weight: 800;
+  font-size: 0.76rem;
+  color: var(--purple, #5f4bb6);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  list-style: none;
+}
+.scard-signups-subheading:first-child { margin-top: 0; }
 
 .scard-signups-toggle {
   display: block;

@@ -733,6 +733,11 @@ async function getAdminShifts() {
       is_adult: !!info.is_adult,
       is_youth: !!info.is_youth,
       is_corporate: !!info.is_corporate,
+      // Prior volunteer hours from the registered-volunteers sheet. Drives the
+      // Helper vs New split on Orientation shifts (Peter): 1+ hours = an
+      // existing volunteer helping run it, 0 = a newcomer attending it.
+      // null when the volunteer isn't in the sheet at all (unknown, not zero).
+      prior_hours: Object.prototype.hasOwnProperty.call(info, 'priorHours') ? info.priorHours : null,
       attendance: s.attendance, signup_id: s.signup_id,
       checkin_time: s.checkin_time, checkout_time: s.checkout_time, hours_logged: s.hours_logged,
     });

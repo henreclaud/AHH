@@ -320,7 +320,7 @@ function createCard(shift) {
     // Determine whether this shift is in the future (for ⏳ badge).
     const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local (Pacific) time
 
-    shift.signups.forEach(({ name, email, phone, registered, is_ya, is_adult, is_youth, is_corporate, attendance, checkin_time, checkout_time, hours_logged }) => {
+    const makeSignupRow = ({ name, email, phone, registered, is_ya, is_adult, is_youth, is_corporate, attendance, checkin_time, checkout_time, hours_logged }) => {
       const li = document.createElement('li');
 
       let attendanceBadge = '';
@@ -364,8 +364,33 @@ function createCard(shift) {
         ${hoursHtml}
         ${registered === 'No' ? '<div class="signup-unregistered">⚠️ Not a registered volunteer</div>' : ''}
       `;
-      list.appendChild(li);
-    });
+      return li;
+    };
+
+    // Orientation shifts mix two very different groups: existing volunteers
+    // helping run the session, and newcomers attending it. Peter asked to tell
+    // them apart using the Volunteer Hours column — 1+ hours = Helper, 0 = New.
+    // Volunteers not found in the registered sheet have unknown hours
+    // (prior_hours === null) and go in their own group rather than being
+    // guessed as newcomers.
+    if ((shift.category || '') === 'Orientation') {
+      const groups = [
+        ['Helper Volunteers', s => s.prior_hours !== null && s.prior_hours > 0],
+        ['New Volunteers',    s => s.prior_hours === 0],
+        ['Hours unknown',     s => s.prior_hours === null || s.prior_hours === undefined],
+      ];
+      for (const [label, test] of groups) {
+        const members = shift.signups.filter(test);
+        if (!members.length) continue;
+        const sub = document.createElement('p');
+        sub.className = 'scard-signups-subheading';
+        sub.textContent = `${label} (${members.length})`;
+        list.appendChild(sub);
+        members.forEach(s => list.appendChild(makeSignupRow(s)));
+      }
+    } else {
+      shift.signups.forEach(s => list.appendChild(makeSignupRow(s)));
+    }
     signupSection.appendChild(list);
 
     // "Notify volunteers" mailto button

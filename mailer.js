@@ -7,6 +7,19 @@
 
 const nodemailer = require('nodemailer');
 
+// Escapes text before it goes into an HTML email body. Volunteers type their
+// own name at signup, so without this a name containing < > & (or markup)
+// would be injected raw into the reminder's HTML. Plain-text email bodies
+// don't need this — only the `html` field does.
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── SMTP transport — used by send-reminders.js (GitHub Actions only) ──────────
 
 function createTransport() {
@@ -90,10 +103,10 @@ async function sendReminderEmail({ to, name, shiftName, date, time, location, ca
   ].join('\n');
 
   const html = `
-<p>Hi ${name},</p>
+<p>Hi ${escapeHtml(name)},</p>
 <p>
-  This is a reminder that you're signed up for <strong>${shiftName}</strong> on
-  <strong>${prettyDate} at ${time}</strong>${locationLine}.
+  This is a reminder that you're signed up for <strong>${escapeHtml(shiftName)}</strong> on
+  <strong>${escapeHtml(prettyDate)} at ${escapeHtml(time)}</strong>${location ? `, located at ${escapeHtml(location)}` : ''}.
 </p>
 <p>We look forward to seeing you!</p>
 <p>

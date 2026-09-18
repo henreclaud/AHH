@@ -94,16 +94,21 @@
         <label>
           Full name (first and last)
           <input type="text" id="name" name="name" autocomplete="name"
-                 placeholder="Jane Smith" required />
+                 placeholder="Jane Smith" maxlength="120" required />
         </label>
         <label>
           Your email
-          <input type="email" id="email" name="email" autocomplete="email" required />
+          <input type="email" id="email" name="email" autocomplete="email"
+                 maxlength="254" required />
         </label>
         <p id="form-error" class="form-error"></p>
+        <!-- Running list of people already signed up in this sitting, so a
+             parent adding several family members can see who's been added. -->
+        <p id="signup-added" class="signup-added" hidden></p>
         <div class="dialog-buttons">
           <button type="button" id="cancel-button" class="btn btn-secondary">Cancel</button>
-          <button type="submit" class="btn btn-primary">Count me in</button>
+          <button type="submit" id="add-another-button" class="btn btn-secondary">Count me in and add another</button>
+          <button type="submit" id="submit-button" class="btn btn-primary">Count me in</button>
         </div>
       </form>
     </dialog>

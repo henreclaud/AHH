@@ -202,6 +202,14 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// Length caps on anything a volunteer types that ends up in the Google Sheet.
+// Without these the only limit was the 64 kb JSON body cap, so a single signup
+// could push a ~64,000-character name into a cell — corrupting the row and
+// making the staff page unreadable. Generous enough for real names (including
+// the "Parent and Child 9 yo" style entries staff actually use).
+const MAX_NAME_LEN  = 120;
+const MAX_EMAIL_LEN = 254; // RFC 5321 practical maximum for an address
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 // GET /api/shifts
@@ -228,7 +236,10 @@ app.post('/api/shifts/:id/signup', publicApiLimiter, async (req, res) => {
   if (!/\S+\s+\S+/.test(name)) {
     return res.status(400).json({ error: 'Please enter your first and last name.' });
   }
-  if (!isValidEmail(email)) {
+  if (name.length > MAX_NAME_LEN) {
+    return res.status(400).json({ error: `Please keep your name under ${MAX_NAME_LEN} characters.` });
+  }
+  if (email.length > MAX_EMAIL_LEN || !isValidEmail(email)) {
     return res.status(400).json({ error: 'Please enter a valid email address.' });
   }
 
@@ -246,7 +257,7 @@ app.post('/api/shifts/:id/signup', publicApiLimiter, async (req, res) => {
 // Returns all upcoming signups for the given email (for the cancel page).
 app.get('/api/signups', publicApiLimiter, async (req, res) => {
   const email = (req.query.email || '').trim();
-  if (!email || !isValidEmail(email)) {
+  if (!email || email.length > MAX_EMAIL_LEN || !isValidEmail(email)) {
     return res.status(400).json({ error: 'Please enter a valid email address.' });
   }
   try {

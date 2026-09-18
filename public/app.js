@@ -302,12 +302,25 @@ clearButton.addEventListener('click', () => {
 });
 
 // ── Signup dialog ─────────────────────────────────────────────────────────────
+// Names signed up during the current open dialog, for the "add another" flow.
+let addedThisSitting = [];
+const addedEl = document.getElementById('signup-added');
+
+function renderAddedList() {
+  if (!addedThisSitting.length) { addedEl.hidden = true; return; }
+  const label = addedThisSitting.length === 1 ? 'Added' : `Added (${addedThisSitting.length})`;
+  addedEl.textContent = `✅ ${label}: ${addedThisSitting.join(', ')}`;
+  addedEl.hidden = false;
+}
+
 function openSignup(shift) {
   selectedShiftId = shift.id;
   dialogTitle.textContent = shift.title;
   formError.textContent = '';
   signupForm.reset();
-  signupForm.querySelector('button[type="submit"]').disabled = false;
+  addedThisSitting = [];
+  renderAddedList();
+  signupForm.querySelectorAll('button').forEach(b => { b.disabled = false; });
   dialog.showModal();
 }
 
@@ -319,14 +332,19 @@ signupForm.addEventListener('submit', async e => {
   const name  = document.getElementById('name').value.trim();
   const email = document.getElementById('email').value.trim();
 
+  // Which button submitted? "Count me in and add another" keeps the dialog
+  // open so a parent can sign up several family members in one sitting
+  // (requested by Peter, from volunteer feedback about "starting over").
+  const addAnother = e.submitter && e.submitter.id === 'add-another-button';
+
   // Require at least two words (first + last name).
   if (!/\S+\s+\S+/.test(name)) {
     formError.textContent = 'Please enter your first and last name.';
     return;
   }
 
-  const submitBtn = signupForm.querySelector('button[type="submit"]');
-  submitBtn.disabled = true;
+  const buttons = [...signupForm.querySelectorAll('button')];
+  buttons.forEach(b => { b.disabled = true; });
 
   try {
     const res  = await fetch(`/api/shifts/${selectedShiftId}/signup`, {
@@ -337,15 +355,31 @@ signupForm.addEventListener('submit', async e => {
     const data = await res.json();
     if (!res.ok) {
       formError.textContent = data.error || 'Something went wrong.';
-      submitBtn.disabled = false;
+      buttons.forEach(b => { b.disabled = false; });
       return;
     }
+
+    addedThisSitting.push(name);
+
+    if (addAnother) {
+      // Keep the dialog open and the email in place — the whole point is that
+      // families share one address. Clear just the name for the next person.
+      renderAddedList();
+      document.getElementById('name').value = '';
+      buttons.forEach(b => { b.disabled = false; });
+      document.getElementById('name').focus();
+      await loadShifts(); // refresh spot counts underneath
+      return;
+    }
+
     dialog.close();
     await loadShifts();
-    alert(data.message);
+    alert(addedThisSitting.length > 1
+      ? `Signed up ${addedThisSitting.length} people: ${addedThisSitting.join(', ')}. Thank you!`
+      : data.message);
   } catch {
     formError.textContent = 'Sorry, something went wrong. Please try again.';
-    submitBtn.disabled = false;
+    buttons.forEach(b => { b.disabled = false; });
   }
 });
 
