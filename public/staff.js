@@ -135,7 +135,7 @@ async function loadShifts() {
     }
     allShifts = await shiftsRes.json();
     staffList = staffRes.ok ? await staffRes.json() : [];
-    statNumber.textContent = allShifts.filter(s => !s.is_full).length;
+    statNumber.textContent = allShifts.filter(s => !s.is_full && !s.has_ended).length;
     buildStaffChips();
     render();
     loadBanner();
@@ -221,7 +221,14 @@ function createCard(shift) {
   tag.textContent = shift.category || 'Visit';
   top.appendChild(tag);
 
-  if (shift.has_limit) {
+  // Events stay on this page for 48 hours after they end so staff can refer
+  // back to them for visit reports. Spot counts mean nothing once it's over.
+  if (shift.has_ended) {
+    const pill = document.createElement('span');
+    pill.className = 'spots-pill ended';
+    pill.textContent = 'Ended';
+    top.appendChild(pill);
+  } else if (shift.has_limit) {
     const pill = document.createElement('span');
     const left = shift.spots_left;
     if (shift.is_full) {
@@ -328,7 +335,7 @@ function createCard(shift) {
         attendanceBadge = '<span class="att-badge att-attended">✅ Attended</span>';
       } else if (attendance === 'No-show') {
         attendanceBadge = '<span class="att-badge att-noshow">❌ No-show</span>';
-      } else if (shift.date >= todayStr) {
+      } else if (shift.date >= todayStr && !shift.has_ended) {
         attendanceBadge = '<span class="att-badge att-upcoming">⏳ Upcoming</span>';
       }
 

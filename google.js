@@ -251,13 +251,21 @@ let _cacheExpiresAt = 0;    // epoch ms
 
 const CACHE_TTL_MS = 1 * 60 * 1000; // 1 minute
 
+// Staff asked to keep events on their page for a while after they end, so
+// they can refer back to them when writing visit reports. The cache reaches
+// this far into the past; the volunteer-facing functions filter ended events
+// back out, so volunteers see exactly what they saw before.
+const STAFF_RECENT_MS = 48 * 60 * 60 * 1000; // 48 hours
+
 async function refreshCalendarCache() {
   if (!CALENDAR_ID) throw new Error('GOOGLE_CALENDAR_ID is not set.');
 
   const calendar = google.calendar({ version: 'v3', auth: getAuth() });
 
   const now     = new Date();
-  const timeMin = now.toISOString();
+  // timeMin filters on an event's END time, so this returns everything that
+  // hasn't ended yet plus anything that ended within the last 48 hours.
+  const timeMin = new Date(now.getTime() - STAFF_RECENT_MS).toISOString();
   // Cap at 60 days ahead — prevents recurring-event explosion into thousands of instances.
   const timeMax = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -343,6 +351,7 @@ async function refreshCalendarCache() {
       date:       toDateStr(startDt),   // "YYYY-MM-DD" in Pacific Time
       start_time: toHHMM(startDt),     // "HH:MM" in Pacific Time
       end_time:   toHHMM(endDt),
+      end_ms:     endDt.getTime(),     // for telling ended events apart
       // No "Limit xx" in the title means the shift isn't open for general
       // signups: treated as 0 slots, so only Youth Ambassadors (who bypass the
       // capacity check) can sign up. Per Peter, Aug 2026.
@@ -679,25 +688,33 @@ async function _withCounts(shifts) {
   });
 }
 
+// The cache also holds events that ended in the last 48 hours (for the staff
+// page). Everything volunteer-facing drops them, which also means nobody can
+// sign up for an event that's already over.
+function _notEnded(shifts) {
+  const now = Date.now();
+  return shifts.filter(s => s.end_ms > now);
+}
+
 // Returns all upcoming shifts for the public volunteer page.
 // Excludes: events with no volunteer limit (QA#1), { }-wrapped titles (QA#2),
 // HIDE-prefixed titles, and staff-only fields are stripped from the response.
 async function getShifts() {
-  const shifts = await getCachedShifts();
+  const shifts = _notEnded(await getCachedShifts());
   const result = await _withCounts(shifts);
   return result
     .filter(s => !s.staff_only)                    // { }-wrapped title = staff-only event
     .filter(s => !/^hide\b/i.test(s.title || '')) // HIDE- prefix = staff-only event
     // attendees are staff emails — never expose them on the public endpoint.
     // title_volunteer replaces title here (redacted braced text, if any).
-    .map(({ description_staff, staff_only, attendees, title, title_volunteer, ...pub }) =>
+    .map(({ description_staff, staff_only, attendees, title, title_volunteer, end_ms, ...pub }) =>
       ({ ...pub, title: title_volunteer ?? title }));
 }
 
 // Returns all upcoming shifts for the staff page, including both description
 // sections so coordinators can see what volunteers will read and what's staff-only.
 async function getStaffShifts() {
-  const shifts = await getCachedShifts();
+  const shifts = _notEnded(await getCachedShifts());
   return _withCounts(shifts);
 }
 
@@ -744,12 +761,19 @@ async function getAdminShifts() {
   }
 
   const farmStreet = _farmStreet();
-  return shifts.map(shift => {
-    const shiftSignups = byShift[shift.id] || [];
-    const spots_left   = Math.max(0, shift.capacity - shiftSignups.length);
-    const is_farm      = _isFarmLocation(shift.location, farmStreet);
-    return { ...shift, spots_left, is_full: spots_left <= 0, signups: shiftSignups, is_farm };
-  });
+  const now = Date.now();
+  return shifts
+    // The cache refreshes every minute; trim anything that slipped past the
+    // 48-hour window since the last refresh.
+    .filter(shift => shift.end_ms > now - STAFF_RECENT_MS)
+    .map(shift => {
+      const shiftSignups = byShift[shift.id] || [];
+      const spots_left   = Math.max(0, shift.capacity - shiftSignups.length);
+      const is_farm      = _isFarmLocation(shift.location, farmStreet);
+      // Ended events stay on the staff page for 48 hours (visit reports).
+      const has_ended    = shift.end_ms <= now;
+      return { ...shift, spots_left, is_full: spots_left <= 0, signups: shiftSignups, is_farm, has_ended };
+    });
 }
 
 // ── Registered volunteers cache ───────────────────────────────────────────────

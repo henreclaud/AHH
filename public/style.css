@@ -1473,6 +1473,12 @@ input:focus {
 }
 .spots-pill.low  { color: #b97a0a; }  /* amber warning */
 .spots-pill.full { color: var(--muted); }
+.spots-pill.ended {
+  color: var(--muted);
+  background: var(--purple-soft);
+  padding: 3px 8px;
+  border-radius: 5px;
+}
 
 /* Title */
 .scard-title {
