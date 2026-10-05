@@ -125,6 +125,72 @@ async function sendReminderEmail({ to, name, shiftName, date, time, location, ca
   });
 }
 
+// "2026-10-10" → "Saturday, October 10"
+function prettyDate(date) {
+  const d = new Date(date + 'T12:00:00Z'); // noon UTC keeps date stable across timezones
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+// "9:00am-11:00am" → "9:00am–11:00am"
+function prettyTime(time) {
+  return String(time || '').replace(/-/g, '–');
+}
+
+/**
+ * Tell a volunteer that staff moved the event they signed up for. They stay
+ * signed up for the new date/time; the email gives them the cancel link in
+ * case it no longer works for them (Peter, Oct 2026).
+ *
+ * @param {object} opts
+ * @param {string} opts.to, opts.name, opts.shiftName
+ * @param {string} opts.oldDate, opts.newDate  "YYYY-MM-DD"
+ * @param {string} opts.oldTime, opts.newTime  "9:00am-11:00am"
+ * @param {string} opts.location  New location (may be empty)
+ * @param {string} opts.cancelUrl Full URL to the cancel page
+ */
+async function sendChangeEmail({ to, name, shiftName, oldDate, oldTime, newDate, newTime, location, cancelUrl }) {
+  const transport = createTransport();
+  const was = `${prettyDate(oldDate)}, ${prettyTime(oldTime)}`;
+  const now = `${prettyDate(newDate)}, ${prettyTime(newTime)}`;
+
+  const subject = 'Change to your AAH volunteer visit';
+
+  const text = [
+    `Hi ${name},`,
+    '',
+    `The ${shiftName} you signed up for has moved.`,
+    '',
+    `Was: ${was}`,
+    `Now: ${now}${location ? `, at ${location}` : ''}`,
+    '',
+    "You're still signed up for the new time, so if it works for you there's nothing you need to do.",
+    '',
+    `If it doesn't work for you, please cancel your signup at: ${cancelUrl}`,
+    '',
+    '— Animal Assisted Happiness',
+  ].join('\n');
+
+  const html = `
+<p>Hi ${escapeHtml(name)},</p>
+<p>The <strong>${escapeHtml(shiftName)}</strong> you signed up for has moved.</p>
+<p>
+  Was: <s>${escapeHtml(was)}</s><br>
+  Now: <strong>${escapeHtml(now)}</strong>${location ? `, at ${escapeHtml(location)}` : ''}
+</p>
+<p>You're still signed up for the new time, so if it works for you there's nothing you need to do.</p>
+<p>If it doesn't work for you, please <a href="${cancelUrl}">cancel your signup here</a>.</p>
+<p>— Animal Assisted Happiness</p>
+`.trim();
+
+  await transport.sendMail({
+    from:    `"Animal Assisted Happiness" <${process.env.GMAIL_USER}>`,
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
 /**
  * Send an alert to Jonathan when a registered volunteer with 0 prior hours
  * signs up for a non-Orientation shift — flagged as likely their first visit.
@@ -220,4 +286,4 @@ async function sendConfirmationEmail({ to, name, shiftName, date, time, location
   });
 }
 
-module.exports = { sendReminderEmail, sendUnregisteredAlert, sendNewVolunteerAlert, sendConfirmationEmail };
+module.exports = { sendReminderEmail, sendChangeEmail, sendUnregisteredAlert, sendNewVolunteerAlert, sendConfirmationEmail };

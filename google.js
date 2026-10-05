@@ -9,6 +9,10 @@
 const crypto = require('crypto');
 const { google } = require('googleapis');
 const { sendUnregisteredAlert, sendNewVolunteerAlert } = require('./mailer');
+const {
+  toHHMM, toDateStr, normalizeDateStr,
+  stripSignupBlock, currentSignupBlock, withSignupBlock,
+} = require('./calendar-sync');
 
 // ── Environment variables ────────────────────────────────────────────────────
 // GOOGLE_CALENDAR_ID          — the calendar to read shifts from
@@ -17,6 +21,12 @@ const { sendUnregisteredAlert, sendNewVolunteerAlert } = require('./mailer');
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
 const SHEET_ID    = process.env.GOOGLE_SHEET_ID;
+
+// CALENDAR_WRITEBACK=on lets the app write each event's signup list into its
+// calendar description. Off by default: it needs the calendar shared with the
+// service account as "Make changes to events", and until it's switched on the
+// app keeps read-only calendar access.
+const CALENDAR_WRITEBACK = (process.env.CALENDAR_WRITEBACK || '').trim().toLowerCase() === 'on';
 
 // Parse the service-account credentials.
 // When pasting JSON into Render's env var field the newlines inside the
@@ -52,7 +62,9 @@ function getCredentials() {
 // the actual Sheets/Calendar API calls use undici too.
 
 const SCOPES = [
-  'https://www.googleapis.com/auth/calendar.readonly',
+  CALENDAR_WRITEBACK
+    ? 'https://www.googleapis.com/auth/calendar'
+    : 'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/spreadsheets',
 ].join(' ');
 
@@ -172,20 +184,8 @@ function parseDescription(raw) {
 
 const PT = 'America/Los_Angeles'; // AAH operates in Pacific Time
 
-// Format a JS Date as "9:00am" / "3:30pm" in Pacific Time.
-function toHHMM(date) {
-  return date.toLocaleTimeString('en-US', {
-    timeZone: PT,
-    hour:     'numeric',
-    minute:   '2-digit',
-    hour12:   true,
-  }).toLowerCase().replace(/\s/g, ''); // "9:00 AM" → "9:00am"
-}
-
-// Format a JS Date as "YYYY-MM-DD" in Pacific Time.
-function toDateStr(date) {
-  return date.toLocaleDateString('en-CA', { timeZone: PT }); // en-CA gives YYYY-MM-DD
-}
+// toHHMM / toDateStr live in calendar-sync.js, shared with the reminder job so
+// both always format an event's date and time the same way.
 
 // Patterns that indicate a volunteer limit — checked in title AND description.
 // Matches: "Limit 5", "Limit: 5", "Limit 5 volunteers", "5 spots", "5 volunteer spots",
@@ -247,6 +247,7 @@ function deriveCategory(name) {
 // ── Calendar cache ────────────────────────────────────────────────────────────
 
 let _calendarCache  = [];   // array of raw shift objects (no signup counts)
+let _rawDescCache   = new Map(); // event ID → description exactly as stored in the calendar
 let _cacheExpiresAt = 0;    // epoch ms
 
 const CACHE_TTL_MS = 1 * 60 * 1000; // 1 minute
@@ -289,10 +290,15 @@ async function refreshCalendarCache() {
   } while (pageToken);
 
   const shifts = [];
+  const rawDescById = new Map();
 
   for (const event of events) {
     const rawTitle = (event.summary || '').trim();
-    const desc     = (event.description || '').trim();
+    // The app's own signup-list block is removed before anything reads the
+    // description: it's never shown on any page, and a name typed into the
+    // signup form can't be mistaken for a "Limit xx" spot count.
+    const desc     = stripSignupBlock(event.description || '').trim();
+    rawDescById.set(event.id, event.description || '');
 
     // Skip events that are already full — they're at capacity and not available.
     if (/\bfull\b/i.test(rawTitle)) continue;
@@ -373,6 +379,7 @@ async function refreshCalendarCache() {
   }
 
   _calendarCache  = shifts;
+  _rawDescCache   = rawDescById;
   _cacheExpiresAt = Date.now() + CACHE_TTL_MS;
   console.log(`[calendar] cached ${shifts.length} shift(s)`);
   return shifts;
@@ -535,21 +542,7 @@ async function ensureHeaders() {
 
 }
 
-// Normalises a sheet date string to "YYYY-MM-DD" for comparison.
-// Google Sheets may silently reformat dates written as 2026-07-02 into a
-// locale form like 7/2/2026, which breaks exact string matching everywhere
-// (no-show cron, upcoming-signup lookup).
-function normalizeDateStr(s) {
-  s = String(s || '').trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/); // M/D/YYYY (US sheet locale)
-  if (m) {
-    const y = m[3].length === 2 ? `20${m[3]}` : m[3];
-    return `${y}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
-  }
-  const d = new Date(s);
-  return isNaN(d) ? s : d.toLocaleDateString('en-CA', { timeZone: PT });
-}
+// normalizeDateStr (sheet date → "YYYY-MM-DD") lives in calendar-sync.js.
 
 // Reads every signup row from the sheet and returns plain objects.
 async function getAllSignups() {
@@ -930,6 +923,11 @@ async function createSignup(shiftId, name, email) {
 
   // Confirmation email is handled by the Google Sheet Apps Script trigger.
 
+  // Add them to the event's signup list in the calendar (no-op unless
+  // CALENDAR_WRITEBACK is on). Never holds up or fails the signup itself.
+  syncEventSignups(shift.id)
+    .catch(err => console.warn(`[writeback] could not update ${shift.id} after signup:`, err.message));
+
   // Alert staff if the volunteer is not registered (fire-and-forget, non-fatal).
   if (registeredFlag === 'No') {
     sendUnregisteredAlert({
@@ -1069,7 +1067,133 @@ async function cancelSignupById(signupId) {
     },
   });
 
+  // Take them off the event's signup list in the calendar (no-op unless on).
+  const shiftId = (rows[matchIndex][3] || '').trim();
+  syncEventSignups(shiftId)
+    .catch(err => console.warn(`[writeback] could not update ${shiftId} after cancel:`, err.message));
+
   return { ok: true, message: 'Your signup has been cancelled.' };
+}
+
+// ── Calendar write-back ───────────────────────────────────────────────────────
+//
+// With CALENDAR_WRITEBACK=on, each event's description carries a staff-only
+// list of who's signed up (format in calendar-sync.js), so staff changing an
+// event can see who it affects. Written straight after every signup and
+// cancellation, and re-checked every 15 minutes to catch rows staff add or
+// delete by hand in the sheet.
+//
+// Safety:
+//   - Only the app's own block is ever changed; staff text is kept as-is.
+//   - Writes carry the event's etag. If staff save the event at the same
+//     moment, Google refuses our write (412) instead of overwriting their
+//     edit; we re-read the event and try once more.
+//   - sendUpdates 'none': guests aren't emailed about these edits.
+//   - One write per event at a time, so two signups seconds apart can't race
+//     and leave an out-of-date list behind.
+
+const RECONCILE_MS          = 15 * 60 * 1000;
+const RECONCILE_MAX_WRITES  = 25; // per run — stays well inside Google's per-minute quotas
+const _syncQueue = new Map();     // event ID → the sync in flight for it
+
+// Treats "\n" and "<br>" as the same line break, so Google's own reformatting
+// of a description is never mistaken for a change we need to write.
+function _sameDescription(a, b) {
+  const norm = s => String(s || '').replace(/<br\s*\/?>/gi, '\n').trim();
+  return norm(a) === norm(b);
+}
+
+function _httpStatus(err) {
+  return Number(err.status || err.code || (err.response && err.response.status)) || 0;
+}
+
+// Queues a rewrite of one event's signup list. `signups` may be passed in by
+// the reconcile pass (which already read the sheet); otherwise the sheet is
+// read fresh at the moment the write runs, so it's never stale.
+function syncEventSignups(eventId, signups) {
+  if (!CALENDAR_WRITEBACK || !eventId || !CALENDAR_ID) return Promise.resolve(false);
+  const prev = _syncQueue.get(eventId) || Promise.resolve();
+  const next = prev.catch(() => {}).then(() => _writeSignupBlock(eventId, signups));
+  _syncQueue.set(eventId, next);
+  next.finally(() => { if (_syncQueue.get(eventId) === next) _syncQueue.delete(eventId); })
+      .catch(() => {});
+  return next;
+}
+
+// Returns true when the description was changed.
+async function _writeSignupBlock(eventId, signups) {
+  const calendar = google.calendar({ version: 'v3', auth: getAuth() });
+  const list = signups || (await getAllSignups()).filter(s => s.shift_id === eventId);
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let event;
+    try {
+      ({ data: event } = await calendar.events.get({ calendarId: CALENDAR_ID, eventId }));
+    } catch (err) {
+      if ([404, 410].includes(_httpStatus(err))) return false; // event deleted — nothing to write
+      throw err;
+    }
+    if (event.status === 'cancelled') return false;
+
+    const current = event.description || '';
+    const desired = withSignupBlock(current, list);
+    if (_sameDescription(desired, current)) {
+      _rawDescCache.set(eventId, current);
+      return false;
+    }
+
+    try {
+      await calendar.events.patch(
+        { calendarId: CALENDAR_ID, eventId, sendUpdates: 'none', requestBody: { description: desired } },
+        { headers: { 'If-Match': event.etag } },
+      );
+      _rawDescCache.set(eventId, desired);
+      console.log(`[writeback] signup list on ${eventId} now has ${list.length} name(s)`);
+      return true;
+    } catch (err) {
+      if (_httpStatus(err) === 412 && attempt === 1) continue; // staff just saved it — re-read
+      throw err;
+    }
+  }
+  return false;
+}
+
+// Brings every upcoming event's signup list in line with the sheet. Only
+// events whose list actually differs are written.
+async function reconcileSignupBlocks() {
+  if (!CALENDAR_WRITEBACK) return { written: 0 };
+  const [shifts, signups] = await Promise.all([getCachedShifts(), getAllSignups()]);
+
+  const byShift = new Map();
+  for (const s of signups) {
+    if (!byShift.has(s.shift_id)) byShift.set(s.shift_id, []);
+    byShift.get(s.shift_id).push(s);
+  }
+
+  const now = Date.now();
+  let written = 0;
+  for (const shift of shifts) {
+    if (shift.end_ms <= now) continue;                // past events stay as they were
+    if (written >= RECONCILE_MAX_WRITES) break;       // the rest wait for the next run
+    const list = byShift.get(shift.id) || [];
+    const raw  = _rawDescCache.get(shift.id) || '';
+    if (!list.length && !currentSignupBlock(raw)) continue; // no signups, no block: nothing to do
+    if (_sameDescription(withSignupBlock(raw, list), raw)) continue;
+    try {
+      if (await syncEventSignups(shift.id, list)) written++;
+    } catch (err) {
+      console.warn(`[writeback] reconcile could not update ${shift.id}:`, err.message);
+    }
+  }
+  if (written) console.log(`[writeback] reconcile updated ${written} event(s)`);
+  return { written };
+}
+
+if (CALENDAR_WRITEBACK) {
+  const run = () => reconcileSignupBlocks()
+    .catch(err => console.error('[writeback] reconcile failed:', err.message));
+  setTimeout(run, 2 * 60 * 1000).unref();       // first pass shortly after start-up
+  setInterval(run, RECONCILE_MS).unref();
 }
 
 // ── Attendance helpers ────────────────────────────────────────────────────────
@@ -1423,4 +1547,4 @@ async function getStaffList() {
   return _staffCache;
 }
 
-module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getStaffList, getBannerMessages, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, sanitizeForSheet };
+module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getStaffList, getBannerMessages, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, sanitizeForSheet, syncEventSignups, reconcileSignupBlocks };
