@@ -21,6 +21,7 @@ const { google } = require('googleapis');
 const { sendReminderEmail, sendChangeEmail } = require('./mailer');
 const {
   toDateStr, normalizeDateStr, normalizeTimeRange, eventSlot, hasMoved,
+  SWITCH_TAB, SWITCHES, parseSwitches,
 } = require('./calendar-sync');
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -55,10 +56,10 @@ const MOVE_LOOKBACK_DAYS = 2;
 // date bug) rather than staff rescheduling — so nothing is changed or emailed.
 const MASS_MOVE_LIMIT = 25;
 
-// Column P records each move, so staff can see it and so a volunteer is only
-// ever emailed once per move:
-//   "Moved from 2026-10-10 9:00am-11:00am · notice pending"
-//   "Moved from 2026-10-10 9:00am-11:00am · volunteer emailed 2026-10-05"
+// Column P records each move, so staff can see it (and when it happened), and
+// so a volunteer is only ever emailed once per move:
+//   "Moved from 2026-10-10 9:00am-11:00am (changed 2026-10-05) · notice pending"
+//   "Moved from 2026-10-10 9:00am-11:00am (changed 2026-10-05) · volunteer emailed 2026-10-05"
 const PENDING = 'notice pending';
 const NOTICE_RE = /^Moved from (\d{4}-\d{2}-\d{2}) (\S+)/;
 
@@ -175,7 +176,7 @@ async function applyMoves(sheets, rows, events, now) {
     changes.push({
       i, signupId,
       date: slot.date, time: slot.time,
-      notice: backToStart ? '' : `Moved from ${from.date} ${from.time} · ${PENDING}`,
+      notice: backToStart ? '' : `Moved from ${from.date} ${from.time} (changed ${toDateStr(now)}) · ${PENDING}`,
     });
   }
 
@@ -317,29 +318,50 @@ async function main() {
   const header = rows[0] || [];
   await ensureHeader(sheets, header, COL.REMINDED, 'I', 'Reminded');
 
+  const now = new Date();
+
+  // Everything about moved events below is fail-soft: whatever goes wrong in
+  // it, reminders still go out. (An earlier version threw in this area and
+  // killed every reminder run for ~17 hours.)
+
+  // ── TEMPORARY KILL SWITCH — remove after launch (then movesEnabled = true) ─
+  // "follow moved events" in the app switches tab. Anything but ON — a
+  // missing tab, a typo, a failed read — means move checks don't run.
+  let movesEnabled = false;
+  try {
+    const sw = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${SWITCH_TAB}'!A:B` });
+    movesEnabled = parseSwitches(sw.data.values).get(SWITCHES.FOLLOW_MOVES) === true;
+  } catch (err) {
+    console.warn(`[moves] Could not read the "${SWITCH_TAB}" tab — treating it as OFF:`, err.message);
+  }
+  if (!movesEnabled) console.log(`[moves] "${SWITCHES.FOLLOW_MOVES}" is OFF — skipping move checks.`);
+
   // Column P is claimed only if it's empty: the sheet's own Apps Script (signup
   // confirmations) lives outside this code, and if it ever uses P we must not
   // overwrite its data. In that case moves are skipped and it's logged.
-  const pHeader = (header[COL.NOTICE] || '').trim();
-  let movesEnabled = true;
-  if (!pHeader) await ensureHeader(sheets, header, COL.NOTICE, 'P', 'Change Notice');
-  else if (pHeader !== 'Change Notice') {
-    movesEnabled = false;
-    console.error(`[moves] Column P already holds "${pHeader}" — move checks are off until it's free.`);
+  if (movesEnabled) {
+    try {
+      const pHeader = (header[COL.NOTICE] || '').trim();
+      if (!pHeader) await ensureHeader(sheets, header, COL.NOTICE, 'P', 'Change Notice');
+      else if (pHeader !== 'Change Notice') {
+        movesEnabled = false;
+        console.error(`[moves] Column P already holds "${pHeader}" — move checks are off until it's free.`);
+      }
+    } catch (err) {
+      movesEnabled = false;
+      console.warn('[moves] Could not set up column P; skipping move checks:', err.message);
+    }
   }
 
-  const now = new Date();
-
   // ── Look up the calendar event behind every upcoming signup ───────────────
-  // Guarded: if the calendar can't be read at all, moves are skipped this run
-  // and reminders still go out (without locations). An earlier version threw
-  // in this area and killed every reminder run for ~17 hours.
-  const cutoff = toDateStr(new Date(now.getTime() - MOVE_LOOKBACK_DAYS * 864e5));
-  const ids = [...new Set(rows.slice(1)
-    .filter(r => cell(r, COL.SHIFT_ID) && normalizeDateStr(cell(r, COL.DATE)) >= cutoff)
-    .map(r => cell(r, COL.SHIFT_ID)))];
+  // If the calendar can't be read, moves are skipped this run and reminders
+  // still go out (without locations).
   let events = new Map();
   try {
+    const cutoff = toDateStr(new Date(now.getTime() - MOVE_LOOKBACK_DAYS * 864e5));
+    const ids = [...new Set(rows.slice(1)
+      .filter(r => cell(r, COL.SHIFT_ID) && normalizeDateStr(cell(r, COL.DATE)) >= cutoff)
+      .map(r => cell(r, COL.SHIFT_ID)))];
     events = await fetchEventsById(auth, ids);
   } catch (err) {
     console.warn('[calendar] Event lookup failed; skipping move checks this run:', err.message);

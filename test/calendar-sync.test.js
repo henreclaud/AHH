@@ -83,6 +83,18 @@ test('eventSlot uses the same date and time format as signup rows', () => {
   assert.strictEqual(slot.time, '9:00am-11:30am');
 });
 
+test('kill switches: only an exact ON counts as on', () => {
+  const sw = cs.parseSwitches([
+    ['Calendar signup list', 'on '],     // case and spaces don't matter
+    ['follow moved events',  'OFF'],
+    ['something else',       'yes'],
+  ]);
+  assert.strictEqual(sw.get(cs.SWITCHES.CALENDAR_LIST), true);
+  assert.strictEqual(sw.get(cs.SWITCHES.FOLLOW_MOVES),  false);
+  assert.strictEqual(sw.get('something else'),          false);   // "yes" is not ON
+  assert.strictEqual(cs.parseSwitches(undefined).size,  0);       // missing tab → nothing on
+});
+
 test('hasMoved ignores formatting differences but catches real moves', () => {
   const slot = { date: '2026-10-10', time: '9:00am-11:30am' };
   assert.strictEqual(cs.hasMoved('2026-10-10', '9:00am-11:30am', slot), false);
