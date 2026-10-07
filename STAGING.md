@@ -22,7 +22,7 @@ contain `TEST`, and sends every staff alert to you.
 
 ## Running
 
-- Website: `npm run staging` → http://localhost:3000 (staff page uses the password `setup` printed)
+- Website: `npm run staging` → http://localhost:3000 (for the staff page, use the password that setup printed)
 - Hourly job, once: `npm run staging:job`
 
 ## Test plan
