@@ -13,3 +13,6 @@ database.sqlite
 # Service account credentials if saved as a file
 *.credentials.json
 service-account*.json
+
+# Staging settings (contains the service-account key — never commit)
+.env.staging
