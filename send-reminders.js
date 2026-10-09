@@ -346,16 +346,24 @@ async function main() {
   // it, reminders still go out. (An earlier version threw in this area and
   // killed every reminder run for ~17 hours.)
 
-  // Column P is claimed only if it's empty: the sheet's own Apps Script (signup
-  // confirmations) lives outside this code, and if it ever uses P we must not
-  // overwrite its data. In that case moves are skipped and it's logged.
+  // Column P is only used if nothing else is using it. The sheet's own Apps
+  // Script (signup confirmations) lives outside this code, so instead of
+  // assuming, every run checks: the header must be empty or ours, and every
+  // cell below must be empty or one of our own move notes. Anything else in
+  // P (another header, or values written without one) means P belongs to
+  // something else — move checks are skipped and it's logged, never overwritten.
   let movesEnabled = true;
   try {
     const pHeader = (header[COL.NOTICE] || '').trim();
-    if (!pHeader) await ensureHeader(sheets, header, COL.NOTICE, 'P', 'Change Notice');
-    else if (pHeader !== 'Change Notice') {
+    const foreign = rows.slice(1).map(r => cell(r, COL.NOTICE)).filter(v => v && !NOTICE_RE.test(v));
+    if (pHeader && pHeader !== 'Change Notice') {
       movesEnabled = false;
       console.error(`[moves] Column P already holds "${pHeader}" — move checks are off until it's free.`);
+    } else if (foreign.length) {
+      movesEnabled = false;
+      console.error(`[moves] Column P has ${foreign.length} value(s) the app didn't write — move checks are off until it's free.`);
+    } else if (!pHeader) {
+      await ensureHeader(sheets, header, COL.NOTICE, 'P', 'Change Notice');
     }
   } catch (err) {
     movesEnabled = false;

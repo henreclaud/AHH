@@ -53,9 +53,13 @@ Tick each one. "Calendar" means the TEST calendar in Google Calendar.
 ## Launch (live)
 
 1. Peter gives the service account **Make changes to events** on the AAH calendar.
-2. Check the live sheet's Apps Script (Extensions → Apps Script) doesn't use column P.
-3. Merge `release/2026-11` into `main` and push. In Render, set `CALENDAR_WRITEBACK=on`.
-4. Sign up for a real upcoming event yourself, check the calendar, then cancel.
+2. Merge `release/2026-11` into `main` and push. In Render, set `CALENDAR_WRITEBACK=on`.
+3. Sign up for a real upcoming event yourself, check the calendar, then cancel.
+   If the list doesn't appear, the Render log will say why (e.g. no edit access yet).
+4. After the next hourly run, open GitHub → Actions → the latest "send-reminders"
+   run. If it mentions **Column P**, something else (e.g. the sheet's Apps Script)
+   is using that column: the app leaves it alone and moved-event handling stays
+   off until that's sorted. Everything else keeps working.
 
 If the site misbehaves after the launch: Render → the service → Events →
 **Rollback** to the previous deploy. Every moved signup keeps its original

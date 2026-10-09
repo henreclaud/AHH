@@ -256,6 +256,26 @@ let afterB;
   check('Z. row deleted mid-run: reminder sent AND marked on the right row', reminders(st).length === 1 && due && due[8] === 'Yes', JSON.stringify(st.sheet.slice(1).map(r => [r[1], r[8]])));
 }
 
+// AA. Something else writes into column P without a header (e.g. an Apps Script)
+{
+  const oldT = now + 72 * H, t = now + 20 * H;
+  const r1 = row('Ari', 'ari@x.org', 'EAA', oldT, 'SAA1'); r1[15] = 'Confirmation sent';
+  const r2 = row('Bea', 'bea@x.org', 'EAB', t, 'SAA2');
+  const st = run({ sheet: [HEADER, r1, r2], events: { EAA: ev('EAA', now + 120 * H), EAB: ev('EAB', t) } }, 'AA');
+  check('AA. column P used by something else (no header): left alone, no moves', !st.sheet[0][15] && find(st, 'SAA1')[15] === 'Confirmation sent' && changes(st).length === 0 && /didn't write/.test(st.log));
+  check('AA. …reminders still go out', reminders(st).length === 1);
+}
+
+// AB. Column P holds only the app's own notes: still usable
+{
+  const oldT = now + 72 * H;
+  const r1 = row('Cal', 'cal@x.org', 'EAC', oldT, 'SAB1'); r1[15] = 'Moved from 2026-10-01 9:00am-11:00am (changed 2026-09-30) · volunteer emailed 2026-09-30';
+  const r2 = row('Dot', 'dot@x.org', 'EAD', oldT, 'SAB2');
+  const hdr = [...HEADER]; hdr[15] = 'Change Notice';
+  const st = run({ sheet: [hdr, r1, r2], events: { EAC: ev('EAC', oldT), EAD: ev('EAD', now + 120 * H) } }, 'AB');
+  check('AB. column P with only our own notes: moves keep working', changes(st).length === 1 && changes(st)[0].to === 'dot@x.org');
+}
+
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 process.exit(fails ? 1 : 0);
