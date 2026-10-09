@@ -17,8 +17,8 @@ contain `TEST`, and sends every staff alert to you.
    never into chat or email. `.env.staging` is git-ignored.
 4. **Fill with test data:** `npm run staging:setup`
    This creates fake volunteers (your address with `+adult`, `+ya`, `+youth`,
-   `+new`), a staff password for the TEST sheet, both switches ON, a STAGING
-   banner, and 4–5 test events. Run it again any time to start fresh.
+   `+new`), a staff password for the TEST sheet, a STAGING banner, and 4–5
+   test events. Run it again any time to start fresh.
 
 ## Running
 
@@ -43,37 +43,20 @@ Tick each one. "Calendar" means the TEST calendar in Google Calendar.
 **Moved events**
 - [ ] Sign up for an event, then drag it to another day in Calendar, then run `npm run staging:job`
       → the sheet row has the new date/time, column P says `Moved from … · volunteer emailed …`, and the change email arrives (needs `GMAIL_*` set)
+- [ ] Sign up two family members with one email, move their event, run the job → ONE email naming both
 - [ ] Run the job again → no second email
+- [ ] Change only the end time → one change email
 - [ ] Move an event to tomorrow → change email AND a reminder for the new time
 - [ ] Delete an event that has a signup → job changes nothing, sends nothing
 - [ ] Check in on the moved event's new day → works
-
-**Kill switch** (`app switches` tab)
-- [ ] Set `calendar signup list` to OFF → wait 1 minute → sign up → calendar NOT changed, signup still works
-- [ ] Set it back to ON → within 15 minutes the missed signup appears
-- [ ] Set `follow moved events` to OFF → move an event → run job → nothing changes, no email; reminders still sent
 
 ## Launch (live)
 
 1. Peter gives the service account **Make changes to events** on the AAH calendar.
 2. Check the live sheet's Apps Script (Extensions → Apps Script) doesn't use column P.
-3. Add an `app switches` tab to the live sheet with both rows set to **OFF**.
-4. Merge `release/2026-11` into `main` and push. In Render, set `CALENDAR_WRITEBACK=on`.
-5. Turn `calendar signup list` ON, then `follow moved events` ON. Watch for a day.
+3. Merge `release/2026-11` into `main` and push. In Render, set `CALENDAR_WRITEBACK=on`.
+4. Sign up for a real upcoming event yourself, check the calendar, then cancel.
 
-## Kill switch (if something goes wrong)
-
-Set the broken feature's row in the `app switches` tab to **OFF**.
-The website stops writing to the calendar within 1 minute; the hourly job
-stops on its next run. Signups, reminders and check-in carry on as normal.
-Every moved row keeps its original date/time in column P, so anything wrong
-can be put back.
-
-If the whole site is broken (not just these features): Render → the service →
-Events → **Rollback** to the previous deploy.
-
-## After launch: remove the kill switch
-
-Once both features have run without problems, delete every block marked
-`TEMPORARY KILL SWITCH` (calendar-sync.js, google.js, send-reminders.js, and
-the related tests), and the `app switches` tab. Both features then simply run.
+If the site misbehaves after the launch: Render → the service → Events →
+**Rollback** to the previous deploy. Every moved signup keeps its original
+date and time in column P, so any wrong change can be put back.

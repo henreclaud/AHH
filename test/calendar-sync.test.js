@@ -83,16 +83,14 @@ test('eventSlot uses the same date and time format as signup rows', () => {
   assert.strictEqual(slot.time, '9:00am-11:30am');
 });
 
-test('kill switches: only an exact ON counts as on', () => {
-  const sw = cs.parseSwitches([
-    ['Calendar signup list', 'on '],     // case and spaces don't matter
-    ['follow moved events',  'OFF'],
-    ['something else',       'yes'],
-  ]);
-  assert.strictEqual(sw.get(cs.SWITCHES.CALENDAR_LIST), true);
-  assert.strictEqual(sw.get(cs.SWITCHES.FOLLOW_MOVES),  false);
-  assert.strictEqual(sw.get('something else'),          false);   // "yes" is not ON
-  assert.strictEqual(cs.parseSwitches(undefined).size,  0);       // missing tab → nothing on
+test('daylight saving (Nov 1, 2026): times stay right on both sides of the change', () => {
+  const before = cs.eventSlot({ start: { dateTime: '2026-10-31T09:00:00-07:00' }, end: { dateTime: '2026-10-31T11:00:00-07:00' } });
+  const after  = cs.eventSlot({ start: { dateTime: '2026-11-02T09:00:00-08:00' }, end: { dateTime: '2026-11-02T11:00:00-08:00' } });
+  assert.deepStrictEqual([before.date, before.time], ['2026-10-31', '9:00am-11:00am']);
+  assert.deepStrictEqual([after.date,  after.time],  ['2026-11-02', '9:00am-11:00am']);
+  // An event that crosses the change at 2am still reads as the clock-on-the-wall times.
+  const across = cs.eventSlot({ start: { dateTime: '2026-11-01T00:30:00-07:00' }, end: { dateTime: '2026-11-01T03:30:00-08:00' } });
+  assert.strictEqual(across.time, '12:30am-3:30am');
 });
 
 test('hasMoved ignores formatting differences but catches real moves', () => {

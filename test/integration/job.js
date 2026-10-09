@@ -25,12 +25,17 @@ const row = (name, email, eventId, startMs, signupId, extra = {}) => {
   return ['ts', name, email, eventId, `Visit ${eventId}`, s.date, s.time, signupId, extra.reminded || '', 'Yes', extra.attendance || '', '', '', '', '', extra.notice || ''];
 };
 
-function run(state, label) {
+const rowFor = (event, name, email, signupId, extra = {}) => {
+  const s = cs.eventSlot(event);
+  return ['ts', name, email, event.id, `Visit ${event.id}`, extra.date || s.date, extra.time || s.time, signupId, '', 'Yes', '', '', '', '', '', ''];
+};
+
+function run(state, label, extraEnv = {}) {
   const inF = path.join(TMP, 'in.json'), outF = path.join(TMP, 'out.json');
   fs.writeFileSync(inF, JSON.stringify(state));
   const res = spawnSync(process.execPath, ['-r', STUB, JOB], {
     env: { ...process.env, STATE_IN: inF, STATE_OUT: outF, GOOGLE_SHEET_ID: 's', GOOGLE_CALENDAR_ID: 'c',
-           GOOGLE_SERVICE_ACCOUNT_JSON: '{}', APP_URL: 'https://volunteerapp.test' },
+           GOOGLE_SERVICE_ACCOUNT_JSON: '{}', APP_URL: 'https://volunteerapp.test', ...extraEnv },
     encoding: 'utf8',
   });
   if (res.status !== 0) { console.log(`--- ${label} CRASHED ---\n${res.stdout}\n${res.stderr}`); process.exit(2); }
@@ -140,27 +145,115 @@ let afterB;
   check('K. row deleted mid-run: the move lands on the right volunteer', st.sheet.length === 2 && ivy && ivy[5] === cs.eventSlot(ev('EM', newT)).date, ivy && ivy[5]);
 }
 
-// L–N. TEMPORARY KILL SWITCH
+
+// O. A parent signed up three kids with one email; the event moves
 {
-  const oldT = now + 72 * H, t = now + 20 * H;
-  const before = [HEADER, row('Kay', 'kay@x.org', 'EL', oldT, 'SL1'), row('Lu', 'lu@x.org', 'EN', t, 'SL2')];
-  const st = run({ sheet: clone(before), events: { EL: ev('EL', now + 120 * H), EN: ev('EN', t) },
-                   switches: [['calendar signup list','ON'], ['follow moved events','OFF']] }, 'L');
-  check('L. switch OFF: moved event left alone, nobody emailed about it', changes(st).length === 0 && find(st, 'SL1')[5] === before[1][5]);
-  check('L. switch OFF: column P not claimed', !st.sheet[0][15]);
-  check('L. switch OFF: reminders still sent', reminders(st).length === 1);
+  const oldT = now + 72 * H, newT = now + 120 * H;
+  const st = run({ sheet: [HEADER,
+      row('Kid One', 'parent@x.org', 'EF', oldT, 'SF1'),
+      row('Kid Two', 'parent@x.org', 'EF', oldT, 'SF2'),
+      row('Kid Three', 'PARENT@x.org', 'EF', oldT, 'SF3')],
+    events: { EF: ev('EF', newT) } }, 'O');
+  const c = changes(st);
+  check('O. family on one email: ONE change email naming all three', c.length === 1 && c[0].names.join(',') === 'Kid One,Kid Two,Kid Three', c.map(x => x.names.join('+')).join(' | '));
+  check('O. family: all three rows marked as emailed', ['SF1', 'SF2', 'SF3'].every(id => /volunteer emailed/.test(find(st, id)[15])));
 }
+
+// P. Two different people on the same moved event → one email each
+{
+  const oldT = now + 72 * H, newT = now + 120 * H;
+  const st = run({ sheet: [HEADER, row('Pat', 'pat@x.org', 'EG', oldT, 'SG1'), row('Quin', 'quin@x.org', 'EG', oldT, 'SG2')],
+                   events: { EG: ev('EG', newT) } }, 'P');
+  check('P. two different emails on one event: two emails', changes(st).length === 2 && new Set(changes(st).map(x => x.to)).size === 2);
+}
+
+// Q + R. Only the time changes (same day)
+{
+  const t = now + 72 * H;
+  const later = { ...ev('EQ', t + 2 * H) };                                    // starts 2 h later, same length
+  const longer = { ...ev('ER', t), end: { dateTime: iso(t + 3 * H) } };       // same start, ends 1 h later
+  const st = run({ sheet: [HEADER, row('Rae', 'rae@x.org', 'EQ', t, 'SQ'), row('Sol', 'sol@x.org', 'ER', t, 'SR')],
+                   events: { EQ: later, ER: longer } }, 'Q');
+  const byTo = Object.fromEntries(changes(st).map(x => [x.to, x]));
+  check('Q. start time changed on the same day: change email with new time', byTo['rae@x.org'] && byTo['rae@x.org'].newTime === cs.eventSlot(later).time && byTo['rae@x.org'].oldDate === byTo['rae@x.org'].newDate);
+  check('R. only the end time changed: change email too', byTo['sol@x.org'] && byTo['sol@x.org'].newTime === cs.eventSlot(longer).time);
+}
+
+// S. Google Sheets reformatted the date (10/10/2026) and time ("9:00AM – 11:00AM")
+{
+  const t = now + 20 * H, e = ev('ES', t), s = cs.eventSlot(e);
+  const [y, m, d] = s.date.split('-');
+  const usDate = `${+m}/${+d}/${y}`;
+  const fancyTime = s.time.toUpperCase().replace('-', ' – ');
+  const st = run({ sheet: [HEADER, rowFor(e, 'Tia', 'tia@x.org', 'SS', { date: usDate, time: fancyTime })], events: { ES: e } }, 'S');
+  check('S. reformatted date/time in the sheet: NOT treated as a move', changes(st).length === 0 && find(st, 'SS')[5] === usDate, `${usDate} ${fancyTime}`);
+  check('S. …and the reminder still goes out', reminders(st).length === 1);
+}
+
+// T. All-day event: row and calendar agree, nothing moves
+{
+  const d0 = new Date(now + 4 * 864e5).toISOString().slice(0, 10), d1 = new Date(now + 5 * 864e5).toISOString().slice(0, 10);
+  const allDay = { id: 'ET', status: 'confirmed', location: 'Farm', summary: 'Open Day', start: { date: d0 }, end: { date: d1 } };
+  const st = run({ sheet: [HEADER, rowFor(allDay, 'Uma', 'uma@x.org', 'ST')], events: { ET: allDay } }, 'T');
+  check('T. all-day event: not treated as a move', changes(st).length === 0 && !find(st, 'ST')[15]);
+}
+
+// U. Google errors on one event; another event moved in the same run
 {
   const oldT = now + 72 * H;
-  const before = [HEADER, row('Mo', 'mo@x.org', 'EM2', oldT, 'SM2')];
-  const st = run({ sheet: clone(before), events: { EM2: ev('EM2', now + 120 * H) }, switches: 'MISSING' }, 'M');
-  check('M. switch tab missing: treated as OFF', changes(st).length === 0 && find(st, 'SM2')[5] === before[1][5]);
+  const st = run({ sheet: [HEADER, row('Vic', 'vic@x.org', 'EU', oldT, 'SU1'), row('Wes', 'wes@x.org', 'EV', oldT, 'SU2')],
+                   events: { EU: 'ERROR500', EV: ev('EV', now + 120 * H) } }, 'U');
+  check('U. one event unreadable: its row left alone', find(st, 'SU1')[5] === row('', '', 'EU', oldT, '')[5] && !find(st, 'SU1')[15]);
+  check('U. …the other moved event is still handled', changes(st).length === 1 && changes(st)[0].to === 'wes@x.org');
 }
+
+// V. Calendar not configured at all: no moves, reminders still go out
 {
-  const t0 = now + 72 * H, t1 = now + 96 * H;
-  let st = run({ sheet: [HEADER, row('Ned', 'ned@x.org', 'EP', t0, 'SN')], events: { EP: ev('EP', t1) }, failChangeEmail: true }, 'N1');
-  st = run({ sheet: st.sheet, events: { EP: ev('EP', t1) }, switches: [['follow moved events','OFF']] }, 'N2');
-  check('N. pending notice + switch OFF: no email sent', changes(st).length === 0 && /notice pending$/.test(find(st, 'SN')[15]));
+  const t = now + 20 * H;
+  const st = run({ sheet: [HEADER, row('Xan', 'xan@x.org', 'EW', t, 'SV')], events: { EW: ev('EW', t + 48 * H) } }, 'V', { GOOGLE_CALENDAR_ID: '' });
+  check('V. no calendar ID: nothing moved, reminder still sent (no location)', changes(st).length === 0 && reminders(st).length === 1 && reminders(st)[0].location === '');
+}
+
+// W. Old row with no Signup ID: never moved (rows are matched by ID)
+{
+  const oldT = now + 72 * H;
+  const r = row('Yul', 'yul@x.org', 'EX', oldT, '');
+  const st = run({ sheet: [HEADER, r], events: { EX: ev('EX', now + 120 * H) } }, 'W');
+  check('W. row without a Signup ID: left alone', changes(st).length === 0 && st.sheet[1][5] === r[5]);
+}
+
+// X. Scale: 2,000 signups across 150 events, 10 of which moved
+{
+  const rows = [HEADER], evs = {};
+  for (let k = 0; k < 150; k++) evs[`EB${k}`] = ev(`EB${k}`, now + (50 + k) * H);
+  for (let i = 0; i < 2000; i++) { const k = i % 150; rows.push(row(`P${i}`, `p${i}@x.org`, `EB${k}`, now + (50 + k) * H, `SB${i}`)); }
+  for (let k = 0; k < 10; k++) evs[`EB${k}`] = ev(`EB${k}`, now + (50 + k) * H + 24 * H);   // move 10 events a day later
+  const movedRows = rows.slice(1).filter(r => +r[3].slice(2) < 10).length;
+  const t0 = Date.now();
+  const st = run({ sheet: rows, events: evs }, 'X');
+  const secs = ((Date.now() - t0) / 1000).toFixed(1);
+  const marked = st.sheet.slice(1).filter(r => /volunteer emailed/.test(r[15] || '')).length;
+  check(`X. 2,000 signups / 150 events: exactly the ${movedRows} moved signups updated and emailed`, marked === movedRows && changes(st).length === movedRows, `${marked} marked, ${changes(st).length} emails, ${secs}s`);
+}
+
+// Y. Quiet month: one big event holds 40 of 50 signups and is moved
+{
+  const rows = [HEADER], evs = {};
+  evs.EBIG = ev('EBIG', now + 120 * H);                         // moved (signups say +72 h)
+  for (let i = 0; i < 40; i++) rows.push(row(`Big${i}`, `big${i}@x.org`, 'EBIG', now + 72 * H, `SY${i}`));
+  for (let k = 0; k < 10; k++) { evs[`EQ${k}`] = ev(`EQ${k}`, now + (80 + k) * H); rows.push(row(`Q${k}`, `q${k}@x.org`, `EQ${k}`, now + (80 + k) * H, `SYQ${k}`)); }
+  const st = run({ sheet: rows, events: evs }, 'Y');
+  check('Y. one big event moved in a quiet month: NOT blocked, all 40 emailed', changes(st).length === 40 && !/SAFETY STOP/.test(st.log));
+}
+
+// Z. Someone cancels while reminders are going out: the "Reminded" mark lands on the right person
+{
+  const t = now + 20 * H;
+  // Row 2 (not due) is deleted mid-run; the due signup moves from row 3 up to row 2.
+  const st = run({ sheet: [HEADER, row('Gone', 'gone@x.org', 'EZ1', now + 200 * H, 'SZ1'), row('Due', 'due@x.org', 'EZ2', t, 'SZ2')],
+                   events: { EZ1: ev('EZ1', now + 200 * H), EZ2: ev('EZ2', t) }, deleteRowOnFirstHRead: 2 }, 'Z');
+  const due = find(st, 'SZ2');
+  check('Z. row deleted mid-run: reminder sent AND marked on the right row', reminders(st).length === 1 && due && due[8] === 'Yes', JSON.stringify(st.sheet.slice(1).map(r => [r[1], r[8]])));
 }
 
 fs.rmSync(TMP, { recursive: true, force: true });

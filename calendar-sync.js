@@ -138,45 +138,7 @@ function withSignupBlock(desc, signups) {
   return staffText.replace(/(?:\s|<br\s*\/?>)*$/i, '') + (html ? '<br><br>' : '\n\n') + block;
 }
 
-// ── TEMPORARY KILL SWITCH ────────────────────────────────────────────────────
-//
-// For the launch of calendar sync only. Once it's confirmed stable, remove
-// every block marked "TEMPORARY KILL SWITCH" (here, google.js and
-// send-reminders.js, plus the test that uses parseSwitches); both features
-// then simply run.
-//
-// An "app switches" tab in the signups spreadsheet turns each feature on or
-// off with no code change or redeploy — the kill switch if the launch goes
-// wrong:
-//
-//   A                       B
-//   calendar signup list    ON
-//   follow moved events     ON
-//
-// A switch only counts as ON when its cell says exactly ON. A missing tab, a
-// missing row, a typo or a failed read all mean OFF, so the features can never
-// run by accident.
-
-const SWITCH_TAB = 'app switches';
-const SWITCHES = {
-  CALENDAR_LIST: 'calendar signup list',
-  FOLLOW_MOVES:  'follow moved events',
-};
-
-// Sheet rows → Map of switch name → true (ON) / false.
-function parseSwitches(rows) {
-  const map = new Map();
-  for (const r of rows || []) {
-    const name = String((r && r[0]) || '').trim().toLowerCase();
-    if (name) map.set(name, String((r && r[1]) || '').trim().toUpperCase() === 'ON');
-  }
-  return map;
-}
-
 module.exports = {
-  SWITCH_TAB,
-  SWITCHES,
-  parseSwitches,
   PT,
   toHHMM,
   toDateStr,

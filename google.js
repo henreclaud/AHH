@@ -12,7 +12,6 @@ const { sendUnregisteredAlert, sendNewVolunteerAlert } = require('./mailer');
 const {
   toHHMM, toDateStr, normalizeDateStr,
   stripSignupBlock, currentSignupBlock, withSignupBlock,
-  SWITCH_TAB, SWITCHES, parseSwitches,
 } = require('./calendar-sync');
 
 // ── Environment variables ────────────────────────────────────────────────────
@@ -1097,31 +1096,6 @@ const RECONCILE_MS          = 15 * 60 * 1000;
 const RECONCILE_MAX_WRITES  = 25; // per run — stays well inside Google's per-minute quotas
 const _syncQueue = new Map();     // event ID → the sync in flight for it
 
-// TEMPORARY KILL SWITCH (see calendar-sync.js) — remove after launch.
-// Re-read at most once a minute, so flipping it OFF in the sheet stops all
-// calendar writes within a minute. Any read failure counts as OFF.
-const SWITCH_CACHE_MS = Number(process.env.SWITCH_CACHE_MS) || 60 * 1000;
-let _switchCache     = null;
-let _switchExpiresAt = 0;
-
-async function isSwitchOn(name) {
-  if (!_switchCache || Date.now() >= _switchExpiresAt) {
-    try {
-      const sheets = google.sheets({ version: 'v4', auth: getAuth() });
-      const res = await sheets.spreadsheets.values.get({
-        spreadsheetId: SHEET_ID,
-        range:         `'${SWITCH_TAB}'!A:B`,
-      });
-      _switchCache = parseSwitches(res.data.values);
-    } catch (err) {
-      console.warn(`[switches] could not read the "${SWITCH_TAB}" tab — treating every switch as OFF:`, err.message);
-      _switchCache = new Map();
-    }
-    _switchExpiresAt = Date.now() + SWITCH_CACHE_MS;
-  }
-  return _switchCache.get(name) === true;
-}
-
 // Treats "\n" and "<br>" as the same line break, so Google's own reformatting
 // of a description is never mistaken for a change we need to write.
 function _sameDescription(a, b) {
@@ -1148,7 +1122,6 @@ function syncEventSignups(eventId, signups) {
 
 // Returns true when the description was changed.
 async function _writeSignupBlock(eventId, signups) {
-  if (!(await isSwitchOn(SWITCHES.CALENDAR_LIST))) return false; // TEMPORARY KILL SWITCH
   const calendar = google.calendar({ version: 'v3', auth: getAuth() });
   const list = signups || (await getAllSignups()).filter(s => s.shift_id === eventId);
 
@@ -1189,7 +1162,6 @@ async function _writeSignupBlock(eventId, signups) {
 // events whose list actually differs are written.
 async function reconcileSignupBlocks() {
   if (!CALENDAR_WRITEBACK) return { written: 0 };
-  if (!(await isSwitchOn(SWITCHES.CALENDAR_LIST))) return { written: 0 }; // TEMPORARY KILL SWITCH
   const [shifts, signups] = await Promise.all([getCachedShifts(), getAllSignups()]);
 
   const byShift = new Map();

@@ -21,7 +21,6 @@ const { google } = require('googleapis');
 const { sendReminderEmail, sendChangeEmail } = require('./mailer');
 const {
   toDateStr, normalizeDateStr, normalizeTimeRange, eventSlot, hasMoved,
-  SWITCH_TAB, SWITCHES, parseSwitches,
 } = require('./calendar-sync');
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -51,10 +50,12 @@ const WINDOW_MAX_MS = 26 * 60 * 60 * 1000;  // start reminding up to ~26h before
 // Moved events: rows up to 2 days old are still checked, so an event moved
 // late at night (or just after its old date) is still caught.
 const MOVE_LOOKBACK_DAYS = 2;
-// Safety stop: if a single run finds more than this many moved signups AND
-// they're more than half of all upcoming signups, something is wrong (e.g. a
-// date bug) rather than staff rescheduling — so nothing is changed or emailed.
-const MASS_MOVE_LIMIT = 25;
+// Safety stop: if a single run finds more than this many moved EVENTS and
+// they're more than half of all upcoming events with signups, something is
+// wrong (e.g. a date bug) rather than staff rescheduling — so nothing is
+// changed or emailed. Counted in events, not signups, so moving one big event
+// with lots of volunteers is never blocked.
+const MASS_MOVE_LIMIT = 10;
 
 // Column P records each move, so staff can see it (and when it happened), and
 // so a volunteer is only ever emailed once per move:
@@ -148,7 +149,8 @@ async function ensureHeader(sheets, header, col, letter, title) {
 async function applyMoves(sheets, rows, events, now) {
   const cutoff = toDateStr(new Date(now.getTime() - MOVE_LOOKBACK_DAYS * 864e5));
   const changes = [];
-  let eligible = 0;
+  const eligibleEvents = new Set();
+  const movedEvents    = new Set();
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
@@ -156,7 +158,7 @@ async function applyMoves(sheets, rows, events, now) {
     const event    = events.get(cell(row, COL.SHIFT_ID));
     if (!signupId || cell(row, COL.ATTENDANCE)) continue;          // already checked in / no-show
     if (normalizeDateStr(cell(row, COL.DATE)) < cutoff) continue;  // long past
-    eligible++;
+    eligibleEvents.add(cell(row, COL.SHIFT_ID));
     if (!event) continue;                                          // deleted, or couldn't read it
 
     const slot = eventSlot(event);
@@ -173,6 +175,7 @@ async function applyMoves(sheets, rows, events, now) {
     // Moved back to where it was before anyone was told: no email needed.
     const backToStart = from.date === slot.date && from.time === normalizeTimeRange(slot.time);
 
+    movedEvents.add(cell(row, COL.SHIFT_ID));
     changes.push({
       i, signupId,
       date: slot.date, time: slot.time,
@@ -181,8 +184,8 @@ async function applyMoves(sheets, rows, events, now) {
   }
 
   if (!changes.length) return 0;
-  if (changes.length > MASS_MOVE_LIMIT && changes.length > eligible / 2) {
-    console.error(`[moves] SAFETY STOP: ${changes.length} of ${eligible} upcoming signups look moved. ` +
+  if (movedEvents.size > MASS_MOVE_LIMIT && movedEvents.size > eligibleEvents.size / 2) {
+    console.error(`[moves] SAFETY STOP: ${movedEvents.size} of ${eligibleEvents.size} upcoming events look moved. ` +
                   'Nothing was changed or emailed — please check the calendar and this job.');
     return 0;
   }
@@ -213,9 +216,13 @@ async function applyMoves(sheets, rows, events, now) {
 
 // Emails every volunteer with a pending move notice, then marks it sent.
 // A failed email stays pending and is retried on the next run.
+//
+// Signups that share an email AND an event (a parent who signed up several
+// children with "Count me in and add another") get ONE email naming them all,
+// not one identical email per child.
 async function sendMoveNotices(sheets, rows, events, now) {
-  const today = toDateStr(now);
-  const sent  = [];
+  const today  = toDateStr(now);
+  const groups = new Map();
 
   for (let i = 1; i < rows.length; i++) {
     const row    = rows[i];
@@ -226,21 +233,36 @@ async function sendMoveNotices(sheets, rows, events, now) {
     const date  = normalizeDateStr(cell(row, COL.DATE));
     if (!from || !email || date < today) continue;
 
-    const event = events.get(cell(row, COL.SHIFT_ID));
+    const key = [email.toLowerCase(), cell(row, COL.SHIFT_ID), from[1], from[2], date, normalizeTimeRange(cell(row, COL.TIME))].join('|');
+    if (!groups.has(key)) {
+      groups.set(key, {
+        email, from, date, time: cell(row, COL.TIME),
+        shiftId: cell(row, COL.SHIFT_ID), shiftName: cell(row, COL.SHIFT_NAME),
+        names: [], rows: [],
+      });
+    }
+    const g = groups.get(key);
+    g.names.push(cell(row, COL.NAME));
+    g.rows.push({ i, signupId: cell(row, COL.SIGNUP_ID), text: notice.replace(PENDING, `volunteer emailed ${today}`) });
+  }
+
+  const sent = [];
+  for (const g of groups.values()) {
+    const event = events.get(g.shiftId);
     try {
       await sendChangeEmail({
-        to:        email,
-        name:      cell(row, COL.NAME),
-        shiftName: cell(row, COL.SHIFT_NAME),
-        oldDate:   from[1], oldTime: from[2],
-        newDate:   date,    newTime: cell(row, COL.TIME),
+        to:        g.email,
+        names:     g.names,
+        shiftName: g.shiftName,
+        oldDate:   g.from[1], oldTime: g.from[2],
+        newDate:   g.date,    newTime: g.time,
         location:  ((event && event.location) || '').trim(),
         cancelUrl: CANCEL_URL,
       });
-      sent.push({ i, signupId: cell(row, COL.SIGNUP_ID), text: notice.replace(PENDING, `volunteer emailed ${today}`) });
-      console.log(`[moves] ✓ Change email sent to ${email}`);
+      sent.push(...g.rows);
+      console.log(`[moves] ✓ Change email sent to ${g.email} (${g.names.length} signup(s))`);
     } catch (err) {
-      console.error(`[moves] ✗ Change email to ${email} failed (will retry next run):`, err.message);
+      console.error(`[moves] ✗ Change email to ${g.email} failed (will retry next run):`, err.message);
     }
   }
 
@@ -324,33 +346,20 @@ async function main() {
   // it, reminders still go out. (An earlier version threw in this area and
   // killed every reminder run for ~17 hours.)
 
-  // ── TEMPORARY KILL SWITCH — remove after launch (then movesEnabled = true) ─
-  // "follow moved events" in the app switches tab. Anything but ON — a
-  // missing tab, a typo, a failed read — means move checks don't run.
-  let movesEnabled = false;
-  try {
-    const sw = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${SWITCH_TAB}'!A:B` });
-    movesEnabled = parseSwitches(sw.data.values).get(SWITCHES.FOLLOW_MOVES) === true;
-  } catch (err) {
-    console.warn(`[moves] Could not read the "${SWITCH_TAB}" tab — treating it as OFF:`, err.message);
-  }
-  if (!movesEnabled) console.log(`[moves] "${SWITCHES.FOLLOW_MOVES}" is OFF — skipping move checks.`);
-
   // Column P is claimed only if it's empty: the sheet's own Apps Script (signup
   // confirmations) lives outside this code, and if it ever uses P we must not
   // overwrite its data. In that case moves are skipped and it's logged.
-  if (movesEnabled) {
-    try {
-      const pHeader = (header[COL.NOTICE] || '').trim();
-      if (!pHeader) await ensureHeader(sheets, header, COL.NOTICE, 'P', 'Change Notice');
-      else if (pHeader !== 'Change Notice') {
-        movesEnabled = false;
-        console.error(`[moves] Column P already holds "${pHeader}" — move checks are off until it's free.`);
-      }
-    } catch (err) {
+  let movesEnabled = true;
+  try {
+    const pHeader = (header[COL.NOTICE] || '').trim();
+    if (!pHeader) await ensureHeader(sheets, header, COL.NOTICE, 'P', 'Change Notice');
+    else if (pHeader !== 'Change Notice') {
       movesEnabled = false;
-      console.warn('[moves] Could not set up column P; skipping move checks:', err.message);
+      console.error(`[moves] Column P already holds "${pHeader}" — move checks are off until it's free.`);
     }
+  } catch (err) {
+    movesEnabled = false;
+    console.warn('[moves] Could not set up column P; skipping move checks:', err.message);
   }
 
   // ── Look up the calendar event behind every upcoming signup ───────────────
@@ -371,13 +380,21 @@ async function main() {
   if (movesEnabled) try {
     const moved = await applyMoves(sheets, rows, events, now);
     const told  = await sendMoveNotices(sheets, rows, events, now);
-    if (moved || told) console.log(`[moves] ${moved} signup(s) moved, ${told} volunteer(s) emailed`);
+    if (moved || told) console.log(`[moves] ${moved} signup(s) moved, ${told} signup(s) notified`);
   } catch (err) {
     console.error('[moves] Move check failed; continuing with reminders:', err.message);
   }
 
   // ── Reminders ─────────────────────────────────────────────────────────────
   let sent = 0, skipped = 0;
+
+  // Rows shift when someone cancels (their row is deleted), so "Reminded" is
+  // marked by Signup ID, looked up fresh here — not by the row number from the
+  // read at the start, which could by now point at someone else's row (who
+  // would then never get their reminder).
+  let rowNo = null;
+  try { rowNo = await rowNumbersBySignupId(sheets); }
+  catch (err) { console.warn('[reminders] Could not re-read signup IDs; using original row numbers:', err.message); }
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
@@ -421,13 +438,18 @@ async function main() {
           cancelUrl: CANCEL_URL,
         });
 
-        // Mark row as reminded so we never send twice.
-        await sheets.spreadsheets.values.update({
-          spreadsheetId:   SHEET_ID,
-          range:           `signups!I${i + 1}`,
-          valueInputOption: 'RAW',
-          requestBody:     { values: [['Yes']] },
-        });
+        // Mark row as reminded so we never send twice. A row whose Signup ID
+        // has vanished was cancelled meanwhile: nothing to mark.
+        const signupId = cell(row, COL.SIGNUP_ID);
+        const sheetRow = rowNo && signupId ? rowNo.get(signupId) : i + 1;
+        if (sheetRow) {
+          await sheets.spreadsheets.values.update({
+            spreadsheetId:   SHEET_ID,
+            range:           `signups!I${sheetRow}`,
+            valueInputOption: 'RAW',
+            requestBody:     { values: [['Yes']] },
+          });
+        }
 
         console.log(`[reminders] ✓ Sent to ${email} — ${shiftName} on ${dateStr} at ${startTime}`);
         sent++;

@@ -136,49 +136,74 @@ function prettyTime(time) {
   return String(time || '').replace(/-/g, '–');
 }
 
+// ["Jane"] → "Jane"; ["Jane", "Emma", "Dad"] → "Jane, Emma and Dad"
+function joinNames(names) {
+  return names.length <= 1 ? (names[0] || '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 /**
- * Tell a volunteer that staff moved the event they signed up for. They stay
- * signed up for the new date/time; the email gives them the cancel link in
- * case it no longer works for them (Peter, Oct 2026).
+ * Tell a volunteer that staff changed the date or time of the event they
+ * signed up for. They stay signed up for the new time; the email gives them
+ * the cancel link in case it no longer works (Peter, Oct 2026). One email
+ * covers everyone signed up under the same address (e.g. a parent's kids).
  *
- * @param {object} opts
- * @param {string} opts.to, opts.name, opts.shiftName
- * @param {string} opts.oldDate, opts.newDate  "YYYY-MM-DD"
- * @param {string} opts.oldTime, opts.newTime  "9:00am-11:00am"
- * @param {string} opts.location  New location (may be empty)
- * @param {string} opts.cancelUrl Full URL to the cancel page
+ * @param {object}   opts
+ * @param {string}   opts.to, opts.shiftName
+ * @param {string[]} opts.names    Everyone signed up under this address
+ * @param {string}   opts.oldDate, opts.newDate  "YYYY-MM-DD"
+ * @param {string}   opts.oldTime, opts.newTime  "9:00am-11:00am"
+ * @param {string}   opts.location  New location (may be empty)
+ * @param {string}   opts.cancelUrl Full URL to the cancel page
  */
-async function sendChangeEmail({ to, name, shiftName, oldDate, oldTime, newDate, newTime, location, cancelUrl }) {
+async function sendChangeEmail({ to, names, shiftName, oldDate, oldTime, newDate, newTime, location, cancelUrl }) {
   const transport = createTransport();
   const was = `${prettyDate(oldDate)}, ${prettyTime(oldTime)}`;
   const now = `${prettyDate(newDate)}, ${prettyTime(newTime)}`;
+  const list  = (names || []).filter(Boolean);
+  const group = list.length > 1;
+  const who   = joinNames(list);
 
   const subject = 'Change to your AAH volunteer visit';
 
+  const greeting = group ? 'Hi,' : `Hi ${who},`;
+  const opening  = group
+    ? `The ${shiftName} that ${who} signed up for has changed.`
+    : `The ${shiftName} you signed up for has changed.`;
+  const stillOn  = group
+    ? "Everyone is still signed up for the new time, so if it works there's nothing you need to do."
+    : "You're still signed up for the new time, so if it works for you there's nothing you need to do.";
+  const cancelText = group
+    ? "If it doesn't work for someone, please cancel their signup at:"
+    : "If it doesn't work for you, please cancel your signup at:";
+
   const text = [
-    `Hi ${name},`,
+    greeting,
     '',
-    `The ${shiftName} you signed up for has moved.`,
+    opening,
     '',
     `Was: ${was}`,
     `Now: ${now}${location ? `, at ${location}` : ''}`,
     '',
-    "You're still signed up for the new time, so if it works for you there's nothing you need to do.",
+    stillOn,
     '',
-    `If it doesn't work for you, please cancel your signup at: ${cancelUrl}`,
+    `${cancelText} ${cancelUrl}`,
     '',
     '— Animal Assisted Happiness',
   ].join('\n');
 
   const html = `
-<p>Hi ${escapeHtml(name)},</p>
-<p>The <strong>${escapeHtml(shiftName)}</strong> you signed up for has moved.</p>
+<p>${escapeHtml(greeting)}</p>
+<p>${group
+    ? `The <strong>${escapeHtml(shiftName)}</strong> that ${escapeHtml(who)} signed up for has changed.`
+    : `The <strong>${escapeHtml(shiftName)}</strong> you signed up for has changed.`}</p>
 <p>
   Was: <s>${escapeHtml(was)}</s><br>
   Now: <strong>${escapeHtml(now)}</strong>${location ? `, at ${escapeHtml(location)}` : ''}
 </p>
-<p>You're still signed up for the new time, so if it works for you there's nothing you need to do.</p>
-<p>If it doesn't work for you, please <a href="${cancelUrl}">cancel your signup here</a>.</p>
+<p>${escapeHtml(stillOn)}</p>
+<p>${group
+    ? `If it doesn't work for someone, please <a href="${cancelUrl}">cancel their signup here</a>.`
+    : `If it doesn't work for you, please <a href="${cancelUrl}">cancel your signup here</a>.`}</p>
 <p>— Animal Assisted Happiness</p>
 `.trim();
 

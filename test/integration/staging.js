@@ -57,7 +57,7 @@ check('TEST targets: setup succeeds', r.code === 0, r.code !== 0 ? r.text : '');
 const upd   = r.calls.filter(c => c.name === 'values.update');
 const tabOf = c => c.args.range.match(/^'([^']+)'/)[1];
 check('setup writes every tab and empties signups',
-  ['banner', 'pwd', 'registered volunteers', 'staff', 'app switches'].every(t => upd.some(c => tabOf(c) === t)) &&
+  ['banner', 'pwd', 'registered volunteers', 'staff'].every(t => upd.some(c => tabOf(c) === t)) &&
   r.calls.some(c => c.name === 'values.clear' && c.args.range === "'signups'"));
 const reg = (upd.find(c => tabOf(c) === 'registered volunteers') || { args: { requestBody: { values: [[]] } } }).args.requestBody.values;
 check("test volunteers use the tester's +addresses", reg.slice(1).length === 4 && reg.slice(1).every(x => /^tester\+\w+@gmail\.com$/.test(x[0])), reg.slice(1).map(x => x[0]).join(', '));

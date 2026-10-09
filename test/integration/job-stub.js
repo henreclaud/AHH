@@ -26,15 +26,11 @@ const fakeGoogle = {
   calendar: () => ({ events: { get: async ({ eventId }) => {
     const e = events[eventId];
     if (!e || e === 'DELETED') { const er = new Error('Not Found'); er.status = 404; throw er; }
+    if (e === 'ERROR500') { const er = new Error('Backend Error'); er.status = 500; throw er; }
     return { data: JSON.parse(JSON.stringify(e)) };
   } } }),
   sheets: () => ({ spreadsheets: { values: {
     get: async ({ range }) => {
-      if (range === "'app switches'!A:B") {
-        const sw = state.switches === undefined ? [['calendar signup list','ON'], ['follow moved events','ON']] : state.switches;
-        if (sw === 'MISSING') { const e = new Error('Unable to parse range'); e.status = 400; throw e; }
-        return { data: { values: sw } };
-      }
       if (range === 'signups!H:H') {
         hReads++;
         // Simulate a volunteer cancelling mid-run (their row is deleted).

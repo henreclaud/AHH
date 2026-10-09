@@ -139,7 +139,6 @@ async function setup(staging, g) {
       [plusAddress(me, 'new'),   '',     '555-0104', 'TRUE', '',     '', '0'],
     ],
     staff: [['Name', 'Email'], ['Test Staff', me]],
-    'app switches': [['calendar signup list', 'ON'], ['follow moved events', 'ON']],
   };
 
   // Create any missing tabs ("banner" first: the banner reads the first tab).
@@ -158,7 +157,7 @@ async function setup(staging, g) {
       });
     }
   }
-  console.log('✓ TEST spreadsheet filled: banner, signups (empty), pwd, registered volunteers, staff, app switches');
+  console.log('✓ TEST spreadsheet filled: banner, signups (empty), pwd, registered volunteers, staff');
 
   // Replace earlier fixture events with a fresh set.
   const old = await g.calendar.events.list({

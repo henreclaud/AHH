@@ -9,7 +9,7 @@
     "staging:setup": "node scripts/staging.js setup",
     "staging": "node scripts/staging.js server",
     "staging:job": "node scripts/staging.js job",
-    "test:integration": "node test/integration/writeback.js on && node test/integration/writeback.js off && node test/integration/job.js && node test/integration/staging.js"
+    "test:integration": "node test/integration/writeback.js on && node test/integration/writeback.js off && node test/integration/writeback-edge.js && node test/integration/job.js && node test/integration/staging.js"
   },
   "engines": {
     "node": ">=18"
