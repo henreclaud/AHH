@@ -13,7 +13,10 @@ const JOB  = path.join(__dirname, '../../send-reminders.js');
 const STUB = path.join(__dirname, 'job-stub.js');
 const TMP  = fs.mkdtempSync(path.join(os.tmpdir(), 'aah-job-'));
 const H = 3600e3, now = Date.now(), iso = ms => new Date(ms).toISOString();
-const HEADER = ['Timestamp','Volunteer Name','Email','Shift ID','Shift Name','Shift Date','Shift Time','Signup ID','Reminded','Registered','Attendance','Check-in Time','Check-out Time','Hours Logged','Notes',''];
+// Before launch: column P has never been used.
+const HEADER_FRESH = ['Timestamp','Volunteer Name','Email','Shift ID','Shift Name','Shift Date','Shift Time','Signup ID','Reminded','Registered','Attendance','Check-in Time','Check-out Time','Hours Logged','Notes',''];
+// After launch: the job has claimed column P. Most scenarios run in this state.
+const HEADER = [...HEADER_FRESH.slice(0, 15), 'Change Notice'];
 
 const ev = (id, startMs, location = 'Smile Farm') => ({
   id, status: 'confirmed', location, summary: id,
@@ -54,7 +57,7 @@ const clone     = o => JSON.parse(JSON.stringify(o));
 // A. Nothing moved; one shift is due a reminder
 {
   const t = now + 20 * H;
-  const st = run({ sheet: [HEADER, row('Jane', 'jane@x.org', 'E1', t, 'S1')], events: { E1: ev('E1', t) } }, 'A');
+  const st = run({ sheet: [HEADER_FRESH, row('Jane', 'jane@x.org', 'E1', t, 'S1')], events: { E1: ev('E1', t) } }, 'A');
   check('A. unmoved event: reminder sent, no change email', reminders(st).length === 1 && changes(st).length === 0);
   check('A. unmoved event: row not marked as moved', find(st, 'S1')[15] === '');
   check('A. header "Change Notice" added to empty column P', st.sheet[0][15] === 'Change Notice');
@@ -261,7 +264,7 @@ let afterB;
   const oldT = now + 72 * H, t = now + 20 * H;
   const r1 = row('Ari', 'ari@x.org', 'EAA', oldT, 'SAA1'); r1[15] = 'Confirmation sent';
   const r2 = row('Bea', 'bea@x.org', 'EAB', t, 'SAA2');
-  const st = run({ sheet: [HEADER, r1, r2], events: { EAA: ev('EAA', now + 120 * H), EAB: ev('EAB', t) } }, 'AA');
+  const st = run({ sheet: [HEADER_FRESH, r1, r2], events: { EAA: ev('EAA', now + 120 * H), EAB: ev('EAB', t) } }, 'AA');
   check('AA. column P used by something else (no header): left alone, no moves', !st.sheet[0][15] && find(st, 'SAA1')[15] === 'Confirmation sent' && changes(st).length === 0 && /didn't write/.test(st.log));
   check('AA. …reminders still go out', reminders(st).length === 1);
 }
@@ -274,6 +277,30 @@ let afterB;
   const hdr = [...HEADER]; hdr[15] = 'Change Notice';
   const st = run({ sheet: [hdr, r1, r2], events: { EAC: ev('EAC', oldT), EAD: ev('EAD', now + 120 * H) } }, 'AB');
   check('AB. column P with only our own notes: moves keep working', changes(st).length === 1 && changes(st)[0].to === 'dot@x.org');
+}
+
+// AC. LAUNCH DAY: an event staff moved before launch is synced quietly
+{
+  const oldT = now + 72 * H, newT = now + 120 * H, laterT = now + 168 * H;
+  let st = run({ sheet: [HEADER_FRESH, row('Lia', 'lia@x.org', 'ELA', oldT, 'SLA')], events: { ELA: ev('ELA', newT) } }, 'AC1');
+  const r = find(st, 'SLA'), newS = cs.eventSlot(ev('ELA', newT));
+  check('AC. launch day: pre-launch move corrected in the sheet', r[5] === newS.date && r[6] === newS.time);
+  check('AC. launch day: NO email about changes made before launch', changes(st).length === 0);
+  check('AC. launch day: noted as "Synced at launch", column P claimed', /^Synced at launch from \S+ \S+ \(changed /.test(r[15]) && st.sheet[0][15] === 'Change Notice', r[15]);
+  st = run({ sheet: st.sheet, events: { ELA: ev('ELA', newT) } }, 'AC2');
+  check('AC. next run: nothing more happens', changes(st).length === 0);
+  st = run({ sheet: st.sheet, events: { ELA: ev('ELA', laterT) } }, 'AC3');
+  const c = changes(st)[0];
+  check('AC. a move AFTER launch emails, from the synced time', changes(st).length === 1 && c.oldDate === newS.date && c.newDate === cs.eventSlot(ev('ELA', laterT)).date);
+}
+
+// AD. LAUNCH DAY but the calendar can't be read: the quiet sync waits for the next run
+{
+  const oldT = now + 72 * H, newT = now + 120 * H;
+  let st = run({ sheet: [HEADER_FRESH, row('Max', 'max@x.org', 'ELB', oldT, 'SLB')], events: { ELB: 'ERROR500' } }, 'AD1');
+  check('AD. calendar down on launch day: nothing written, column P not claimed', !st.sheet[0][15] && !find(st, 'SLB')[15] && changes(st).length === 0);
+  st = run({ sheet: st.sheet, events: { ELB: ev('ELB', newT) } }, 'AD2');
+  check('AD. next run: still a quiet launch sync, no email', changes(st).length === 0 && /^Synced at launch/.test(find(st, 'SLB')[15]) && st.sheet[0][15] === 'Change Notice');
 }
 
 fs.rmSync(TMP, { recursive: true, force: true });

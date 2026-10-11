@@ -63,6 +63,8 @@ const MASS_MOVE_LIMIT = 10;
 //   "Moved from 2026-10-10 9:00am-11:00am (changed 2026-10-05) · volunteer emailed 2026-10-05"
 const PENDING = 'notice pending';
 const NOTICE_RE = /^Moved from (\d{4}-\d{2}-\d{2}) (\S+)/;
+// Every note the app ever writes in column P starts one of these two ways.
+const OUR_NOTE_RE = /^(Moved from|Synced at launch from) \d{4}-\d{2}-\d{2} /;
 
 // ── Google Auth ───────────────────────────────────────────────────────────────
 
@@ -146,7 +148,12 @@ async function ensureHeader(sheets, header, col, letter, title) {
 // Finds signups whose event has moved, and updates their rows: new date and
 // time, "Reminded" cleared (so they get a fresh reminder for the new time),
 // and a pending notice in column P. Mutates `rows` to match.
-async function applyMoves(sheets, rows, events, now) {
+//
+// `baseline` is the very first run after launch. Events staff moved BEFORE
+// the launch are corrected in the sheet but nobody is emailed: staff may
+// already have told those volunteers, and a burst of emails about old changes
+// on launch day would confuse people. Only moves after the launch email.
+async function applyMoves(sheets, rows, events, now, baseline = false) {
   const cutoff = toDateStr(new Date(now.getTime() - MOVE_LOOKBACK_DAYS * 864e5));
   const changes = [];
   const eligibleEvents = new Set();
@@ -179,7 +186,9 @@ async function applyMoves(sheets, rows, events, now) {
     changes.push({
       i, signupId,
       date: slot.date, time: slot.time,
-      notice: backToStart ? '' : `Moved from ${from.date} ${from.time} (changed ${toDateStr(now)}) · ${PENDING}`,
+      notice: backToStart ? ''
+        : baseline ? `Synced at launch from ${from.date} ${from.time} (changed ${toDateStr(now)})`
+        : `Moved from ${from.date} ${from.time} (changed ${toDateStr(now)}) · ${PENDING}`,
     });
   }
 
@@ -353,17 +362,15 @@ async function main() {
   // P (another header, or values written without one) means P belongs to
   // something else — move checks are skipped and it's logged, never overwritten.
   let movesEnabled = true;
+  const pHeader = (header[COL.NOTICE] || '').trim();
   try {
-    const pHeader = (header[COL.NOTICE] || '').trim();
-    const foreign = rows.slice(1).map(r => cell(r, COL.NOTICE)).filter(v => v && !NOTICE_RE.test(v));
+    const foreign = rows.slice(1).map(r => cell(r, COL.NOTICE)).filter(v => v && !OUR_NOTE_RE.test(v));
     if (pHeader && pHeader !== 'Change Notice') {
       movesEnabled = false;
       console.error(`[moves] Column P already holds "${pHeader}" — move checks are off until it's free.`);
     } else if (foreign.length) {
       movesEnabled = false;
       console.error(`[moves] Column P has ${foreign.length} value(s) the app didn't write — move checks are off until it's free.`);
-    } else if (!pHeader) {
-      await ensureHeader(sheets, header, COL.NOTICE, 'P', 'Change Notice');
     }
   } catch (err) {
     movesEnabled = false;
@@ -374,9 +381,10 @@ async function main() {
   // If the calendar can't be read, moves are skipped this run and reminders
   // still go out (without locations).
   let events = new Map();
+  let ids = [];
   try {
     const cutoff = toDateStr(new Date(now.getTime() - MOVE_LOOKBACK_DAYS * 864e5));
-    const ids = [...new Set(rows.slice(1)
+    ids = [...new Set(rows.slice(1)
       .filter(r => cell(r, COL.SHIFT_ID) && normalizeDateStr(cell(r, COL.DATE)) >= cutoff)
       .map(r => cell(r, COL.SHIFT_ID)))];
     events = await fetchEventsById(auth, ids);
@@ -385,10 +393,23 @@ async function main() {
   }
 
   // ── Moved events: update rows, then email the volunteers ──────────────────
+  // The first run after launch (column P not yet claimed) is the baseline:
+  // earlier changes are synced quietly. Column P is only claimed once that
+  // has actually succeeded — if the calendar couldn't be read, the next run
+  // simply tries the baseline again, so old changes never trigger emails.
   if (movesEnabled) try {
-    const moved = await applyMoves(sheets, rows, events, now);
-    const told  = await sendMoveNotices(sheets, rows, events, now);
-    if (moved || told) console.log(`[moves] ${moved} signup(s) moved, ${told} signup(s) notified`);
+    const baseline = !pHeader;
+    if (baseline && ids.length && !events.size) {
+      console.warn('[moves] First run: calendar unreadable, so the launch sync waits for the next run.');
+    } else {
+      const moved = await applyMoves(sheets, rows, events, now, baseline);
+      if (baseline) {
+        await ensureHeader(sheets, header, COL.NOTICE, 'P', 'Change Notice');
+        console.log(`[moves] Launch sync: ${moved} signup(s) brought up to date quietly (no emails).`);
+      }
+      const told = await sendMoveNotices(sheets, rows, events, now);
+      if (moved || told) console.log(`[moves] ${moved} signup(s) moved, ${told} signup(s) notified`);
+    }
   } catch (err) {
     console.error('[moves] Move check failed; continuing with reminders:', err.message);
   }
