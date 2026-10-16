@@ -27,6 +27,7 @@ const SHEET_ID    = process.env.GOOGLE_SHEET_ID;
 // service account as "Make changes to events", and until it's switched on the
 // app keeps read-only calendar access.
 const CALENDAR_WRITEBACK = (process.env.CALENDAR_WRITEBACK || '').trim().toLowerCase() === 'on';
+console.log(`[writeback] calendar signup lists are ${CALENDAR_WRITEBACK ? 'ON' : 'OFF (set CALENDAR_WRITEBACK=on to enable)'}`);
 
 // Parse the service-account credentials.
 // When pasting JSON into Render's env var field the newlines inside the
@@ -1107,6 +1108,47 @@ function _httpStatus(err) {
   return Number(err.status || err.code || (err.response && err.response.status)) || 0;
 }
 
+// Sheet signup rows → what the calendar list shows. Type markers and phone
+// come from the registered-volunteers tab (same source as the staff page);
+// "Attended" comes from the sheet's attendance column.
+async function _calendarEntries(list) {
+  let reg = new Map();
+  try { reg = await getRegisteredEmails(); }
+  catch (err) { console.warn('[writeback] volunteer details unavailable, listing names only:', err.message); }
+  return list.map(s => {
+    const info = reg.get(String(s.email || '').toLowerCase().trim()) || {};
+    return {
+      name:  s.name,
+      email: s.email,
+      phone: info.phone || '',
+      ya:        s.registered === 'YA',   // same rule as the staff page
+      adult:     !!info.is_adult,
+      youth:     !!info.is_youth,
+      corporate: !!info.is_corporate,
+      unregistered: s.registered === 'No',
+      attended:  s.attendance === 'Attended',
+    };
+  });
+}
+
+// Emails and phone numbers only go into events whose guests are all AAH staff
+// (an @aahsmilefarm.org address or someone on the staff tab). Invited guests
+// can read the description, and some volunteers are children, so any outside
+// guest — or not being able to check — means names only.
+async function _contactsAllowed(guestEmails) {
+  const guests = (guestEmails || [])
+    .map(e => String(e || '').toLowerCase().trim())
+    .filter(e => e && e !== String(CALENDAR_ID || '').toLowerCase() && !e.endsWith('calendar.google.com'));
+  const outside = guests.filter(e => !e.endsWith('@aahsmilefarm.org'));
+  if (!outside.length) return true;
+  try {
+    const staff = new Set((await getStaffList()).map(p => p.email).filter(Boolean));
+    return outside.every(e => staff.has(e));
+  } catch {
+    return false;
+  }
+}
+
 // Queues a rewrite of one event's signup list. `signups` may be passed in by
 // the reconcile pass (which already read the sheet); otherwise the sheet is
 // read fresh at the moment the write runs, so it's never stale.
@@ -1124,6 +1166,7 @@ function syncEventSignups(eventId, signups) {
 async function _writeSignupBlock(eventId, signups) {
   const calendar = google.calendar({ version: 'v3', auth: getAuth() });
   const list = signups || (await getAllSignups()).filter(s => s.shift_id === eventId);
+  const entries = await _calendarEntries(list);
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     let event;
@@ -1135,8 +1178,9 @@ async function _writeSignupBlock(eventId, signups) {
     }
     if (event.status === 'cancelled') return false;
 
-    const current = event.description || '';
-    const desired = withSignupBlock(current, list);
+    const current  = event.description || '';
+    const contacts = await _contactsAllowed((event.attendees || []).filter(a => !a.resource).map(a => a.email));
+    const desired  = withSignupBlock(current, entries, { contacts });
     if (_sameDescription(desired, current)) {
       _rawDescCache.set(eventId, current);
       return false;
@@ -1178,7 +1222,8 @@ async function reconcileSignupBlocks() {
     const list = byShift.get(shift.id) || [];
     const raw  = _rawDescCache.get(shift.id) || '';
     if (!list.length && !currentSignupBlock(raw)) continue; // no signups, no block: nothing to do
-    if (_sameDescription(withSignupBlock(raw, list), raw)) continue;
+    const contacts = await _contactsAllowed((shift.attendees || []).map(a => a.email));
+    if (_sameDescription(withSignupBlock(raw, await _calendarEntries(list), { contacts }), raw)) continue;
     try {
       if (await syncEventSignups(shift.id, list)) written++;
     } catch (err) {
@@ -1313,7 +1358,7 @@ async function markCheckIn(signupId) {
   if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
   const sheets = google.sheets({ version: 'v4', auth: getAuth() });
 
-  const { row } = await findSheetRow(sheets, signupId);
+  const { row, rowData } = await findSheetRow(sheets, signupId);
   if (row === -1) return { ok: false, error: 'Signup not found.' };
 
   const now = new Date();
@@ -1327,6 +1372,11 @@ async function markCheckIn(signupId) {
       ],
     },
   });
+
+  // Show "✓ Attended" in the event's calendar list (no-op unless switched on).
+  const shiftId = ((rowData || [])[3] || '').trim();
+  syncEventSignups(shiftId)
+    .catch(err => console.warn(`[writeback] could not update ${shiftId} after check-in:`, err.message));
 
   return { ok: true, checkin_time: formatPacific(now) };
 }

@@ -75,11 +75,11 @@ const quiet  = fn => { const w = console.warn; console.warn = () => {}; return f
   await Promise.all([...Array(10).keys()].map(k => g.createSignup('E_MANY', `Many ${k}`, `many${k}@x.org`)));
   await settle(400);
   const dm = desc('E_MANY');
-  check('10 simultaneous signups: all 10 listed, once each', /\(10\)/.test(dm) && [...Array(10).keys()].every(k => (dm.match(new RegExp(`Many ${k}\\b`, 'g')) || []).length === 1), JSON.stringify(dm.slice(0, 80)) + '…');
+  check('10 simultaneous signups: all 10 listed, once each', dm.includes('10 signed up') && [...Array(10).keys()].every(k => (dm.match(new RegExp(`Many ${k}\\b`, 'g')) || []).length === 1), JSON.stringify(dm.slice(0, 80)) + '…');
 
   // 6. Event with no description
   await g.createSignup('E_EMPTY', 'Dee Fox', 'dee@x.org'); await settle();
-  check('empty description: becomes just the list', desc('E_EMPTY') === '{Volunteer signups (1), kept up to date by the volunteer app:\nDee Fox}', JSON.stringify(desc('E_EMPTY')));
+  check('empty description: becomes just the list', desc('E_EMPTY').startsWith('{━━━━━━━━ VOLUNTEER SIGNUPS') && desc('E_EMPTY').endsWith('Dee Fox (not registered) · dee@x.org}'), JSON.stringify(desc('E_EMPTY')));
   await g.cancelSignupById(sheet.find(r => r[1] === 'Dee Fox')[7]); await settle();
   check('empty description: back to empty after the last cancel', desc('E_EMPTY') === '', JSON.stringify(desc('E_EMPTY')));
 
@@ -92,7 +92,7 @@ const quiet  = fn => { const w = console.warn; console.warn = () => {}; return f
   let e = cal.get('E_HAND');
   e.description = e.description.replace('Eve Ng', 'Eve Ng\nMade Up Person'); e.etag = `"e${state.etagN++}"`;
   await g.createSignup('E_HAND', 'Finn Ray', 'finn@x.org'); await settle();
-  check('staff typing inside the list: replaced with the real signups', !desc('E_HAND').includes('Made Up Person') && desc('E_HAND').includes('Finn Ray') && /\(2\)/.test(desc('E_HAND')));
+  check('staff typing inside the list: replaced with the real signups', !desc('E_HAND').includes('Made Up Person') && desc('E_HAND').includes('Finn Ray') && desc('E_HAND').includes('2 signed up'));
   e = cal.get('E_HAND');
   e.description = 'Hand edits, block deleted by staff'; e.etag = `"e${state.etagN++}"`;
   // The app sees the edit when its 1-minute calendar copy refreshes; the next
@@ -114,7 +114,7 @@ const quiet  = fn => { const w = console.warn; console.warn = () => {}; return f
   const before = state.patchCalls;
   await g.syncEventSignups('E_BIG');
   const db = desc('E_BIG');
-  check('150 signups: all listed in one write', /\(150\)/.test(db) && db.includes('Guest 0') && db.includes('Guest 149') && state.patchCalls === before + 1, `${db.length} characters`);
+  check('150 signups: one write, totals cover all 150, kept short', db.includes('150 signed up') && db.includes('Guest 0') && state.patchCalls === before + 1 && db.length <= 6200, `${db.length} characters`);
 
   console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
   process.exit(fails ? 1 : 0);

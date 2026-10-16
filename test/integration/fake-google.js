@@ -27,7 +27,8 @@ function installFakeGoogle({ registered, staff, password, onPatch } = {}) {
   const addEvent = (id, summary, description, startMs, durMs = 2 * H, extra = {}) => cal.set(id, {
     id, summary, description, status: 'confirmed', etag: `"e${state.etagN++}"`,
     location: extra.location || '999 E Caribbean Dr, Sunnyvale, CA',
-    start: { dateTime: iso(startMs) }, end: { dateTime: iso(startMs + durMs) }, attendees: [],
+    start: { dateTime: iso(startMs) }, end: { dateTime: iso(startMs + durMs) },
+    attendees: (extra.guests || []).map(email => ({ email, responseStatus: 'accepted' })),
   });
 
   const calendarApi = { events: {
@@ -70,7 +71,16 @@ function installFakeGoogle({ registered, staff, password, onPatch } = {}) {
       },
       append: async ({ requestBody }) => { sheet.push(requestBody.values[0].map(String)); return {}; },
       update: async () => ({}),
-      batchUpdate: async () => ({}),
+      batchUpdate: async ({ requestBody }) => {
+        for (const d of requestBody.data || []) {
+          const m = d.range.match(/^signups!([A-Z])(\d+)$/);
+          if (!m) continue;
+          const row = sheet[+m[2] - 1], col = m[1].charCodeAt(0) - 65;
+          while (row.length <= col) row.push('');
+          row[col] = String(d.values[0][0]);
+        }
+        return {};
+      },
     },
     batchUpdate: async ({ requestBody }) => {
       for (const r of requestBody.requests) if (r.deleteDimension) sheet.splice(r.deleteDimension.range.startIndex, 1);
