@@ -58,3 +58,24 @@ test('no location known: the "at …" part is left out', async () => {
   await sendChangeEmail({ ...base, names: ['Jane'], location: '' });
   assert.match(sent[0].text, /Now: Sunday, October 11, 1:00pm–3:00pm\n/);
 });
+
+test('cancellation email: one volunteer, with date, time and a link to sign up again', async () => {
+  sent.length = 0;
+  const { sendCancelEmail } = require('../mailer');
+  await sendCancelEmail({ to: 'v@x.org', names: ['Jane Smith'], shiftName: 'Farm Chores', date: '2026-10-24', time: '9:00am-11:00am', appUrl: 'https://volunteerapp.test' });
+  const m = sent[0];
+  assert.strictEqual(m.subject, 'Your AAH volunteer visit has been cancelled');
+  assert.match(m.text, /^Hi Jane Smith,/);
+  assert.match(m.text, /the Farm Chores you signed up for on Saturday, October 24, 9:00am–11:00am has been cancelled/);
+  assert.match(m.text, /Your signup has been removed/);
+  assert.match(m.html, /<a href="https:\/\/volunteerapp\.test">/);
+});
+
+test('cancellation email: a family gets one message naming everyone', async () => {
+  sent.length = 0;
+  const { sendCancelEmail } = require('../mailer');
+  await sendCancelEmail({ to: 'p@x.org', names: ['Kid One', 'Kid Two'], shiftName: 'Farm Chores', date: '2026-10-24', time: '9:00am-11:00am', appUrl: 'https://volunteerapp.test' });
+  assert.strictEqual(sent.length, 1);
+  assert.match(sent[0].text, /which Kid One and Kid Two signed up for, has been cancelled/);
+  assert.match(sent[0].text, /Their signups have been removed/);
+});

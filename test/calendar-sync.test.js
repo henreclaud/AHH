@@ -145,3 +145,10 @@ test('hasMoved ignores formatting differences but catches real moves', () => {
   assert.strictEqual(cs.hasMoved('2026-10-11', '9:00am-11:30am', slot), true);
   assert.strictEqual(cs.hasMoved('2026-10-10', '10:00am-11:30am', slot), true);
 });
+
+test('cancelled titles: "Canceled"/"Cancelled" anywhere, whole word only', () => {
+  for (const t of ['CANCELED - Farm Chores', 'Farm Chores (Cancelled)', 'canceled: open hours', '{Canceled} Visit'])
+    assert.strictEqual(cs.isCancelledTitle(t), true, t);
+  for (const t of ['Cancellation policy talk', 'Farm Chores Limit 6', '', undefined])
+    assert.strictEqual(cs.isCancelledTitle(t), false, String(t));
+});

@@ -18,9 +18,9 @@
 require('dotenv').config();
 
 const { google } = require('googleapis');
-const { sendReminderEmail, sendChangeEmail } = require('./mailer');
+const { sendReminderEmail, sendChangeEmail, sendCancelEmail } = require('./mailer');
 const {
-  toDateStr, normalizeDateStr, normalizeTimeRange, eventSlot, hasMoved,
+  toDateStr, normalizeDateStr, normalizeTimeRange, eventSlot, hasMoved, isCancelledTitle,
 } = require('./calendar-sync');
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -64,7 +64,8 @@ const MASS_MOVE_LIMIT = 10;
 const PENDING = 'notice pending';
 const NOTICE_RE = /^Moved from (\d{4}-\d{2}-\d{2}) (\S+)/;
 // Every note the app ever writes in column P starts one of these two ways.
-const OUR_NOTE_RE = /^(Moved from|Synced at launch from) \d{4}-\d{2}-\d{2} /;
+const OUR_NOTE_RE = /^(Moved from|Synced at launch from) \d{4}-\d{2}-\d{2} |^Event cancelled /;
+const CANCEL_NOTE = 'Event cancelled · volunteer emailed';
 
 // ── Google Auth ───────────────────────────────────────────────────────────────
 
@@ -167,6 +168,7 @@ async function applyMoves(sheets, rows, events, now, baseline = false) {
     if (normalizeDateStr(cell(row, COL.DATE)) < cutoff) continue;  // long past
     eligibleEvents.add(cell(row, COL.SHIFT_ID));
     if (!event) continue;                                          // deleted, or couldn't read it
+    if (isCancelledTitle(event.summary)) continue;                 // handled by handleCancellations
 
     const slot = eventSlot(event);
     if (!hasMoved(cell(row, COL.DATE), cell(row, COL.TIME), slot)) continue;
@@ -292,6 +294,109 @@ async function sendMoveNotices(sheets, rows, events, now) {
   return sent.length;
 }
 
+// ── Cancelled events ──────────────────────────────────────────────────────────
+
+let _signupsTabId = null;
+async function signupsTabId(sheets) {
+  if (_signupsTabId !== null) return _signupsTabId;
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets.properties(sheetId,title)' });
+  const tab = (meta.data.sheets || []).find(t => t.properties.title === 'signups');
+  if (!tab) throw new Error('Tab "signups" not found.');
+  return (_signupsTabId = tab.properties.sheetId);
+}
+
+// Deletes one signup row, checking right before that the row still holds that
+// Signup ID (rows shift when volunteers cancel) — never someone else's row.
+async function deleteSignupRow(sheets, signupId) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const n = (await rowNumbersBySignupId(sheets)).get(signupId);
+    if (!n) return false;                                   // already gone
+    const check = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `signups!H${n}` });
+    if (cell((check.data.values || [])[0], 0) !== signupId) continue;   // shifted — look again
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: { requests: [{ deleteDimension: {
+        range: { sheetId: await signupsTabId(sheets), dimension: 'ROWS', startIndex: n - 1, endIndex: n },
+      } }] },
+    });
+    return true;
+  }
+  return false;
+}
+
+// Staff cancel an event by adding "Canceled" to its title (Peter, Oct 2026).
+// For each upcoming signup on it: the volunteer is emailed once (one email per
+// address, naming everyone they signed up), then the signup is removed, the
+// same as if they'd cancelled it themselves. Column P records the email
+// before the removal, so if a removal fails it's retried next run without
+// emailing anyone twice. Removed rows are blanked in `rows`, so the move check
+// and reminders skip them.
+async function handleCancellations(sheets, rows, events, now) {
+  const today  = toDateStr(now);
+  const groups = new Map();
+  const toRemove = [];
+  const upcomingEvents = new Set(), cancelledEvents = new Set();
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const signupId = cell(row, COL.SIGNUP_ID), shiftId = cell(row, COL.SHIFT_ID);
+    if (!signupId || cell(row, COL.ATTENDANCE)) continue;
+    if (normalizeDateStr(cell(row, COL.DATE)) < today) continue;
+    upcomingEvents.add(shiftId);
+    const event = events.get(shiftId);
+    if (!event || !isCancelledTitle(event.summary)) continue;
+    cancelledEvents.add(shiftId);
+    if (cell(row, COL.NOTICE).startsWith('Event cancelled')) { toRemove.push({ i, signupId }); continue; }
+    const email = cell(row, COL.EMAIL);
+    const key = `${email.toLowerCase()}|${shiftId}`;
+    if (!groups.has(key)) {
+      groups.set(key, { email, shiftName: cell(row, COL.SHIFT_NAME), date: normalizeDateStr(cell(row, COL.DATE)), time: cell(row, COL.TIME), names: [], rows: [] });
+    }
+    groups.get(key).names.push(cell(row, COL.NAME));
+    groups.get(key).rows.push({ i, signupId });
+  }
+
+  if (!cancelledEvents.size) return { emailed: 0, removed: 0 };
+  if (cancelledEvents.size > MASS_MOVE_LIMIT && cancelledEvents.size > upcomingEvents.size / 2) {
+    console.error(`[cancel] SAFETY STOP: ${cancelledEvents.size} of ${upcomingEvents.size} upcoming events look cancelled. ` +
+                  'Nothing was emailed or removed — please check the calendar.');
+    return { emailed: 0, removed: 0 };
+  }
+
+  // 1. Email, then note it in column P.
+  const emailed = [];
+  for (const g of groups.values()) {
+    try {
+      await sendCancelEmail({ to: g.email, names: g.names, shiftName: g.shiftName, date: g.date, time: g.time, appUrl: APP_URL });
+      emailed.push(...g.rows);
+      console.log(`[cancel] ✓ Cancellation email sent to ${g.email} (${g.names.length} signup(s))`);
+    } catch (err) {
+      console.error(`[cancel] ✗ Cancellation email to ${g.email} failed (will retry next run):`, err.message);
+    }
+  }
+  if (emailed.length) {
+    const rowNo = await rowNumbersBySignupId(sheets);
+    const data = emailed.map(r => rowNo.get(r.signupId)).filter(Boolean)
+      .map(n => ({ range: `signups!P${n}`, values: [[`${CANCEL_NOTE} ${today}`]] }));
+    if (data.length) {
+      await sheets.spreadsheets.values.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { valueInputOption: 'RAW', data } });
+    }
+    toRemove.push(...emailed);
+  }
+
+  // 2. Remove the signups.
+  let removed = 0;
+  for (const r of toRemove) {
+    try {
+      if (await deleteSignupRow(sheets, r.signupId)) removed++;
+      rows[r.i] = [];
+    } catch (err) {
+      console.error(`[cancel] Could not remove ${r.signupId} (will retry next run):`, err.message);
+    }
+  }
+  return { emailed: emailed.length, removed };
+}
+
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
 // Returns the current UTC offset for America/Los_Angeles in hours (e.g. -7 for PDT).
@@ -402,6 +507,12 @@ async function main() {
     if (baseline && ids.length && !events.size) {
       console.warn('[moves] First run: calendar unreadable, so the launch sync waits for the next run.');
     } else {
+      try {
+        const c = await handleCancellations(sheets, rows, events, now);
+        if (c.emailed || c.removed) console.log(`[cancel] ${c.emailed} signup(s) told, ${c.removed} removed`);
+      } catch (err) {
+        console.error('[cancel] Cancellation check failed; continuing:', err.message);
+      }
       const moved = await applyMoves(sheets, rows, events, now, baseline);
       if (baseline) {
         await ensureHeader(sheets, header, COL.NOTICE, 'P', 'Change Notice');
@@ -441,6 +552,7 @@ async function main() {
     if (reminded === 'yes')             { skipped++; continue; }
 
     const event = events.get(shiftId);
+    if (event && isCancelledTitle(event.summary)) { skipped++; continue; }   // cancelled: no reminder
     const shiftStart = event && !hasMoved(dateStr, timeStr, eventSlot(event))
       ? new Date(eventSlot(event).startMs)
       : parseShiftStartUTC(dateStr, timeStr);

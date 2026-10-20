@@ -217,6 +217,56 @@ async function sendChangeEmail({ to, names, shiftName, oldDate, oldTime, newDate
 }
 
 /**
+ * Tell volunteers that staff cancelled the event they signed up for (by
+ * adding "Canceled" to its title). Their signup is removed by the caller.
+ * One email covers everyone signed up under the same address.
+ *
+ * @param {object}   opts
+ * @param {string}   opts.to, opts.shiftName
+ * @param {string[]} opts.names    Everyone signed up under this address
+ * @param {string}   opts.date     "YYYY-MM-DD"
+ * @param {string}   opts.time     "9:00am-11:00am"
+ * @param {string}   opts.appUrl   The volunteer site, to find another visit
+ */
+async function sendCancelEmail({ to, names, shiftName, date, time, appUrl }) {
+  const transport = createTransport();
+  const when  = `${prettyDate(date)}, ${prettyTime(time)}`;
+  const list  = (names || []).filter(Boolean);
+  const group = list.length > 1;
+  const who   = joinNames(list);
+
+  const subject  = 'Your AAH volunteer visit has been cancelled';
+  const greeting = group ? 'Hi,' : `Hi ${who},`;
+  const opening  = group
+    ? `We're sorry, but the ${shiftName} on ${when}, which ${who} signed up for, has been cancelled.`
+    : `We're sorry, but the ${shiftName} you signed up for on ${when} has been cancelled.`;
+  const removed  = group ? 'Their signups have been removed, so there\'s nothing you need to do.'
+                         : 'Your signup has been removed, so there\'s nothing you need to do.';
+
+  const text = [
+    greeting, '', opening, '', removed, '',
+    `You can sign up for another visit at: ${appUrl}`, '',
+    '— Animal Assisted Happiness',
+  ].join('\n');
+
+  const html = `
+<p>${escapeHtml(greeting)}</p>
+<p>${escapeHtml(opening)}</p>
+<p>${escapeHtml(removed)}</p>
+<p>You can <a href="${appUrl}">sign up for another visit here</a>.</p>
+<p>— Animal Assisted Happiness</p>
+`.trim();
+
+  await transport.sendMail({
+    from:    `"Animal Assisted Happiness" <${process.env.GMAIL_USER}>`,
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
+/**
  * Send an alert to Jonathan when a registered volunteer with 0 prior hours
  * signs up for a non-Orientation shift — flagged as likely their first visit.
  *
@@ -311,4 +361,4 @@ async function sendConfirmationEmail({ to, name, shiftName, date, time, location
   });
 }
 
-module.exports = { sendReminderEmail, sendChangeEmail, sendUnregisteredAlert, sendNewVolunteerAlert, sendConfirmationEmail };
+module.exports = { sendReminderEmail, sendChangeEmail, sendCancelEmail, sendUnregisteredAlert, sendNewVolunteerAlert, sendConfirmationEmail };

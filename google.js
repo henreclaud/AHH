@@ -11,7 +11,7 @@ const { google } = require('googleapis');
 const { sendUnregisteredAlert, sendNewVolunteerAlert } = require('./mailer');
 const {
   toHHMM, toDateStr, normalizeDateStr,
-  stripSignupBlock, currentSignupBlock, withSignupBlock,
+  stripSignupBlock, currentSignupBlock, withSignupBlock, isCancelledTitle,
 } = require('./calendar-sync');
 
 // ── Environment variables ────────────────────────────────────────────────────
@@ -333,7 +333,11 @@ async function refreshCalendarCache() {
     // If redacting the braced text leaves nothing for volunteers to see, treat
     // the event as staff-only rather than showing a blank/broken title.
     const nameVolunteer = parseShiftName(titleVolunteer) || name;
-    const hideFromVolunteers = staff_only || !parseShiftName(titleVolunteer);
+    // "Canceled" in the title: staff are keeping the event on the calendar as a
+    // record, but it's off the volunteer page so nobody new signs up. Existing
+    // signups are emailed and removed by the hourly job.
+    const cancelled = isCancelledTitle(rawTitle);
+    const hideFromVolunteers = staff_only || !parseShiftName(titleVolunteer) || cancelled;
 
     // Look for a capacity limit in the title first, then the description.
     // If neither has one, capacity is null — no limit is shown in the UI.
@@ -365,6 +369,7 @@ async function refreshCalendarCache() {
       capacity:  has_limit ? capacity : 0,
       has_limit,
       staff_only: hideFromVolunteers,
+      cancelled,
       // Invited guests on the calendar event — used to match staff assignments.
       // We go by the guest list rather than the event title because titles can
       // mention several people and aren't reliable.
@@ -701,7 +706,7 @@ async function getShifts() {
     .filter(s => !/^hide\b/i.test(s.title || '')) // HIDE- prefix = staff-only event
     // attendees are staff emails — never expose them on the public endpoint.
     // title_volunteer replaces title here (redacted braced text, if any).
-    .map(({ description_staff, staff_only, attendees, title, title_volunteer, end_ms, ...pub }) =>
+    .map(({ description_staff, staff_only, cancelled, attendees, title, title_volunteer, end_ms, ...pub }) =>
       ({ ...pub, title: title_volunteer ?? title }));
 }
 
@@ -1177,6 +1182,8 @@ async function _writeSignupBlock(eventId, signups) {
       throw err;
     }
     if (event.status === 'cancelled') return false;
+    // A cancelled event keeps its last list as a record of who was signed up.
+    if (isCancelledTitle(event.summary)) return false;
 
     const current  = event.description || '';
     const contacts = await _contactsAllowed((event.attendees || []).filter(a => !a.resource).map(a => a.email));
@@ -1218,6 +1225,7 @@ async function reconcileSignupBlocks() {
   let written = 0;
   for (const shift of shifts) {
     if (shift.end_ms <= now) continue;                // past events stay as they were
+    if (shift.cancelled) continue;                    // cancelled: keep the last list as a record
     if (written >= RECONCILE_MAX_WRITES) break;       // the rest wait for the next run
     const list = byShift.get(shift.id) || [];
     const raw  = _rawDescCache.get(shift.id) || '';

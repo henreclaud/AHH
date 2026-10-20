@@ -52,6 +52,7 @@ const check = (label, ok, detail = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}
 const find      = (st, id) => st.sheet.find(r => r[7] === id);
 const changes   = st => st.emails.filter(e => e.kind === 'change');
 const reminders = st => st.emails.filter(e => e.kind === 'reminder');
+const cancels   = st => st.emails.filter(e => e.kind === 'cancel');
 const clone     = o => JSON.parse(JSON.stringify(o));
 
 // A. Nothing moved; one shift is due a reminder
@@ -301,6 +302,66 @@ let afterB;
   check('AD. calendar down on launch day: nothing written, column P not claimed', !st.sheet[0][15] && !find(st, 'SLB')[15] && changes(st).length === 0);
   st = run({ sheet: st.sheet, events: { ELB: ev('ELB', newT) } }, 'AD2');
   check('AD. next run: still a quiet launch sync, no email', changes(st).length === 0 && /^Synced at launch/.test(find(st, 'SLB')[15]) && st.sheet[0][15] === 'Change Notice');
+}
+
+// CA–CK. CANCELLED EVENTS: staff add "Canceled" to the title
+const evC = (id, startMs, summary) => ({ ...ev(id, startMs), summary });
+{
+  const t = now + 20 * H;   // inside the reminder window
+  const st = run({ sheet: [HEADER,
+      row('Kid One', 'parent@x.org', 'EC1', t, 'SC1'), row('Kid Two', 'parent@x.org', 'EC1', t, 'SC2'),
+      row('Ola', 'ola@x.org', 'EC1', t, 'SC3'), row('Keep', 'keep@x.org', 'EC2', t, 'SC4')],
+    events: { EC1: evC('EC1', t, 'CANCELED - Farm Chores Limit 6'), EC2: evC('EC2', t, 'Farm Chores Limit 6') } }, 'CA');
+  const c = cancels(st);
+  check('CA. cancelled event: one email per address (family grouped)', c.length === 2 && c.find(x => x.to === 'parent@x.org').names.join(',') === 'Kid One,Kid Two', c.map(x => `${x.to}:${x.names.join('+')}`).join(' | '));
+  check('CA. cancelled event: email has the date, time and a link to sign up again', c[0].date === cs.eventSlot(ev('EC1', t)).date && c[0].appUrl === 'https://volunteerapp.test');
+  check('CA. cancelled event: its signups are removed from the sheet', !find(st, 'SC1') && !find(st, 'SC2') && !find(st, 'SC3'));
+  check('CA. cancelled event: no reminder sent; other events unaffected', reminders(st).length === 1 && reminders(st)[0].to === 'keep@x.org' && find(st, 'SC4'));
+  const st2 = run({ sheet: st.sheet, events: st.events }, 'CB');
+  check('CB. next run: nothing more is sent', st2.emails.length === 0 || (cancels(st2).length === 0));
+}
+{
+  const t = now + 48 * H;
+  let st = run({ sheet: [HEADER, row('Pia', 'pia@x.org', 'EC3', t, 'SC5')], events: { EC3: evC('EC3', t, 'Farm Chores (Cancelled)') }, failCancelEmail: true }, 'CC1');
+  check('CC. email fails: signup kept, nothing noted, retried next run', find(st, 'SC5') && !find(st, 'SC5')[15]);
+  st = run({ sheet: st.sheet, events: st.events }, 'CC2');
+  check('CC. …next run: emailed and removed', cancels(st).length === 1 && !find(st, 'SC5'));
+}
+{
+  const t = now + 48 * H;
+  let st = run({ sheet: [HEADER, row('Rio', 'rio@x.org', 'EC4', t, 'SC6')], events: { EC4: evC('EC4', t, 'Canceled: Open Hours') }, failDelete: true }, 'CD1');
+  check('CD. removal fails after the email: noted in column P, signup kept for retry', cancels(st).length === 1 && /^Event cancelled · volunteer emailed/.test(find(st, 'SC6')[15]));
+  st = run({ sheet: st.sheet, events: st.events }, 'CD2');
+  check('CD. …next run: removed WITHOUT a second email', cancels(st).length === 0 && !find(st, 'SC6'));
+}
+{
+  const t = now + 48 * H;
+  const st = run({ sheet: [HEADER, row('Sal', 'sal@x.org', 'EC5', t, 'SC7')], events: { EC5: evC('EC5', t, 'Cancellation policy talk Limit 9') } }, 'CE');
+  check('CE. "Cancellation policy talk" is not a cancelled event', cancels(st).length === 0 && find(st, 'SC7'));
+}
+{
+  const t = now + 30 * H;
+  const past = row('Old', 'old@x.org', 'EC6', now - 72 * H, 'SC8');
+  const st = run({ sheet: [HEADER, past, row('Att', 'att@x.org', 'EC7', t, 'SC9', { attendance: 'Attended' })],
+                   events: { EC6: evC('EC6', now - 72 * H, 'CANCELED old'), EC7: evC('EC7', t, 'CANCELED now') } }, 'CF');
+  check('CF. past or already-attended signups are never touched', cancels(st).length === 0 && find(st, 'SC8') && find(st, 'SC9'));
+}
+{
+  const rows = [HEADER], evs = {};
+  for (let k = 0; k < 12; k++) { rows.push(row(`M${k}`, `m${k}@x.org`, `ECM${k}`, now + (40 + k) * H, `SCM${k}`)); evs[`ECM${k}`] = evC(`ECM${k}`, now + (40 + k) * H, 'CANCELED'); }
+  const st = run({ sheet: rows, events: evs }, 'CH');
+  check('CH. nearly everything "cancelled" at once: safety stop, nothing sent or removed', cancels(st).length === 0 && st.sheet.length === 13 && /SAFETY STOP/.test(st.log));
+}
+{
+  const oldT = now + 72 * H;
+  const st = run({ sheet: [HEADER, row('Mia', 'mia@x.org', 'EC8', oldT, 'SC10')], events: { EC8: evC('EC8', now + 120 * H, 'CANCELED - Farm Visit') } }, 'CI');
+  check('CI. cancelled AND moved: only the cancellation email', cancels(st).length === 1 && changes(st).length === 0 && !find(st, 'SC10'));
+}
+{
+  const t = now + 48 * H;
+  const st = run({ sheet: [HEADER, row('Bystander', 'by@x.org', 'EC9', now + 200 * H, 'SC11'), row('Gone', 'gone@x.org', 'EC10', t, 'SC12')],
+                   events: { EC9: ev('EC9', now + 200 * H), EC10: evC('EC10', t, 'CANCELED') }, deleteRowOnFirstHRead: 2 }, 'CK');
+  check('CK. someone else cancels mid-run: the right signup is removed, nobody else\'s', !find(st, 'SC12') && st.sheet.length === 1, JSON.stringify(st.sheet.slice(1).map(r => r[7])));
 }
 
 fs.rmSync(TMP, { recursive: true, force: true });

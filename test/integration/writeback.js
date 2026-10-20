@@ -10,7 +10,7 @@ process.env.GOOGLE_CALENDAR_ID = 'cal-test';
 process.env.GOOGLE_SHEET_ID    = 'sheet-test';
 process.env.CALENDAR_WRITEBACK = MODE;
 
-const { installFakeGoogle, H } = require('./fake-google');
+const { installFakeGoogle, signupRow, H } = require('./fake-google');
 const now = Date.now();
 const fg  = installFakeGoogle({
   registered: [
@@ -33,6 +33,9 @@ fg.addEvent('E_DOM',  'Farm Chores Limit 6', 'Staff guest', now + 82 * H, 2 * H,
 fg.addEvent('E_TAB',  'Farm Chores Limit 6', 'Staff-tab guest', now + 84 * H, 2 * H, { guests: ['jas.partner@gmail.com'] });
 fg.addEvent('E_OLDFMT', 'Farm Chores Limit 6', 'Notes\n\n{Volunteer signups (1), kept up to date by the volunteer app:\nSomeone Old}', now + 86 * H);
 fg.addEvent('E_CHECKIN', 'Farm Chores Limit 6', 'Check-in test', now + 0.2 * H);   // starting soon
+// Cancelled by staff, with a signup still in the sheet: reconcile must leave it alone.
+fg.addEvent('E_CANC', 'CANCELED - Farm Chores Limit 6', 'Notes', now + 88 * H);
+sheet.push(signupRow({ name: 'Was Coming', email: 'jane@x.org', shiftId: 'E_CANC', date: '2026-12-01', time: '9:00am-11:00am', signupId: 'SCANC' }));
 
 const g = require(path.join(__dirname, '../../google.js'));
 let fails = 0;
@@ -116,6 +119,14 @@ const idOf   = name => (sheet.find(r => r[1] === name) || [])[7];
   await g.createSignup('E_CHECKIN', 'Sam Lee', 'sam@x.org'); await settle();
   const ci = await g.markCheckIn(idOf('Sam Lee') && sheet.find(r => r[3] === 'E_CHECKIN')[7]); await settle();
   check('check-in: "✓ Attended" appears in the calendar list', ci.ok && desc('E_CHECKIN').includes('Sam Lee (YA) · sam@x.org · 408-555-0102 · ✓ Attended'), JSON.stringify(desc('E_CHECKIN')));
+
+  // 13. Cancelled event ("Canceled" in the title)
+  const pubAll = await g.getShifts();
+  check('cancelled event: hidden from the volunteer page', !pubAll.some(x => x.id === 'E_CANC'));
+  const tryJoin = await g.createSignup('E_CANC', 'Late Comer', 'bo@x.org');
+  check('cancelled event: nobody new can sign up', tryJoin.ok === false);
+  check('cancelled event: still on the staff page', (await g.getAdminShifts()).some(x => x.id === 'E_CANC'));
+  check('cancelled event: its list is left as a record (reconcile skips it)', desc('E_CANC') === 'Notes');
 
   // 9. Event deleted from the calendar: no crash
   cal.delete('E_YA');

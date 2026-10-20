@@ -198,7 +198,17 @@ function withSignupBlock(desc, entries, opts = {}) {
   return staffText.replace(/(?:\s|<br\s*\/?>)*$/i, '') + (html ? '<br><br>' : '\n\n') + block;
 }
 
+// ── Cancelled events ─────────────────────────────────────────────────────────
+// Staff cancel an event by adding "Canceled" (or "Cancelled") to its title and
+// leaving it on the calendar (Peter, Oct 2026). Whole word only, so a title
+// like "Cancellation policy talk" doesn't count.
+const CANCELLED_RE = /\bcancell?ed\b/i;
+function isCancelledTitle(title) {
+  return CANCELLED_RE.test(String(title || ''));
+}
+
 module.exports = {
+  isCancelledTitle,
   PT,
   toHHMM,
   toDateStr,

@@ -29,8 +29,19 @@ const fakeGoogle = {
     if (e === 'ERROR500') { const er = new Error('Backend Error'); er.status = 500; throw er; }
     return { data: JSON.parse(JSON.stringify(e)) };
   } } }),
-  sheets: () => ({ spreadsheets: { values: {
+  sheets: () => ({ spreadsheets: {
+    get: async () => ({ data: { sheets: [{ properties: { title: 'signups', sheetId: 0 } }] } }),
+    batchUpdate: async ({ requestBody }) => {
+      if (state.failDelete) throw new Error('Sheets API unavailable');
+      for (const r of requestBody.requests) {
+        if (r.deleteDimension) sheet.splice(r.deleteDimension.range.startIndex, 1);
+      }
+      return {};
+    },
+    values: {
     get: async ({ range }) => {
+      const one = range.match(/^signups!H(\d+)$/);
+      if (one) return { data: { values: [[(sheet[+one[1] - 1] || [])[7] || '']] } };
       if (range === 'signups!H:H') {
         hReads++;
         // Simulate a volunteer cancelling mid-run (their row is deleted).
@@ -45,6 +56,10 @@ const fakeGoogle = {
 };
 const fakeMailer = {
   sendReminderEmail: async (o) => { state.emails.push({ kind: 'reminder', ...o }); },
+  sendCancelEmail:   async (o) => {
+    if (state.failCancelEmail) throw new Error('SMTP down');
+    state.emails.push({ kind: 'cancel', ...o });
+  },
   sendChangeEmail:   async (o) => {
     if (state.failChangeEmail) throw new Error('SMTP down');
     state.emails.push({ kind: 'change', ...o });
