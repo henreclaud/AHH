@@ -364,6 +364,30 @@ const evC = (id, startMs, summary) => ({ ...ev(id, startMs), summary });
   check('CK. someone else cancels mid-run: the right signup is removed, nobody else\'s', !find(st, 'SC12') && st.sheet.length === 1, JSON.stringify(st.sheet.slice(1).map(r => r[7])));
 }
 
+// RS. Reminder names the staff running the visit (accepted guests only)
+{
+  const t = now + 20 * H;
+  const guests = [
+    { email: 'jasmine@aahsmilefarm.org', responseStatus: 'accepted' },
+    { email: 'peter@aahsmilefarm.org',   responseStatus: 'declined' },
+    { email: 'teacher@school.org',       responseStatus: 'accepted' },
+    { email: 'partner@gmail.com',        responseStatus: 'accepted' },
+    { email: 'room@resource.calendar.google.com', responseStatus: 'accepted', resource: true },
+  ];
+  const st = run({ sheet: [HEADER, row('Ann', 'ann@x.org', 'ER1', t, 'SR1'), row('Bob', 'bob@x.org', 'ER2', t, 'SR2')],
+                   events: { ER1: { ...ev('ER1', t), attendees: guests }, ER2: ev('ER2', t) } }, 'RS1');
+  const ann = reminders(st).find(r => r.to === 'ann@x.org'), bob = reminders(st).find(r => r.to === 'bob@x.org');
+  check('RS. reminder lists accepted staff, with names from the staff tab',
+    JSON.stringify(ann.staffContacts) === JSON.stringify([{ name: 'Jas Chen', email: 'jasmine@aahsmilefarm.org' }, { name: 'Pat Partner', email: 'partner@gmail.com' }]),
+    JSON.stringify(ann.staffContacts));
+  check('RS. declined staff, outside guests and rooms are never listed', !JSON.stringify(ann.staffContacts).match(/peter@|teacher@|room@/));
+  check('RS. no staff accepted: no contact line', Array.isArray(bob.staffContacts) && bob.staffContacts.length === 0);
+  const st2 = run({ sheet: [HEADER, row('Cat', 'cat@x.org', 'ER3', t, 'SR3')], events: { ER3: { ...ev('ER3', t), attendees: guests } }, staff: 'ERROR' }, 'RS2');
+  check('RS. staff tab unreadable: AAH addresses still listed (email only), reminder still sent',
+    reminders(st2).length === 1 && JSON.stringify(reminders(st2)[0].staffContacts) === JSON.stringify([{ name: '', email: 'jasmine@aahsmilefarm.org' }]),
+    JSON.stringify(reminders(st2)[0] && reminders(st2)[0].staffContacts));
+}
+
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASS');
 process.exit(fails ? 1 : 0);

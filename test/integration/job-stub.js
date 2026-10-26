@@ -30,7 +30,7 @@ const fakeGoogle = {
     return { data: JSON.parse(JSON.stringify(e)) };
   } } }),
   sheets: () => ({ spreadsheets: {
-    get: async () => ({ data: { sheets: [{ properties: { title: 'signups', sheetId: 0 } }] } }),
+    get: async () => ({ data: { sheets: [{ properties: { title: 'signups', sheetId: 0 } }, { properties: { title: 'staff', sheetId: 1 } }] } }),
     batchUpdate: async ({ requestBody }) => {
       if (state.failDelete) throw new Error('Sheets API unavailable');
       for (const r of requestBody.requests) {
@@ -40,6 +40,10 @@ const fakeGoogle = {
     },
     values: {
     get: async ({ range }) => {
+      if (range === "'staff'!A:Z") {
+        if (state.staff === 'ERROR') { const e = new Error('Sheets read failed'); e.status = 500; throw e; }
+        return { data: { values: state.staff || [['Name', 'Email'], ['Jas Chen', 'jasmine@aahsmilefarm.org'], ['Pat Partner', 'partner@gmail.com']] } };
+      }
       const one = range.match(/^signups!H(\d+)$/);
       if (one) return { data: { values: [[(sheet[+one[1] - 1] || [])[7] || '']] } };
       if (range === 'signups!H:H') {

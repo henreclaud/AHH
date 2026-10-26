@@ -294,6 +294,37 @@ async function sendMoveNotices(sheets, rows, events, now) {
   return sent.length;
 }
 
+// ── Staff contacts for reminders ──────────────────────────────────────────────
+
+// Staff names by email, from the staff tab (the same tab the staff page uses).
+async function fetchStaff(sheets) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets.properties(sheetId,title)' });
+  const tab = (meta.data.sheets || []).map(t => t.properties.title).find(t => /sta+f/i.test(t) && !/signup/i.test(t));
+  const map = new Map();
+  if (!tab) return map;
+  const res  = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${tab}'!A:Z` });
+  const rows = res.data.values || [];
+  const head = (rows[0] || []).map(h => String(h || '').trim().toLowerCase());
+  const nIdx = head.findIndex(h => h.includes('name')), eIdx = head.findIndex(h => h.includes('mail'));
+  const hasHeader = nIdx >= 0 || eIdx >= 0;
+  for (const r of rows.slice(hasHeader ? 1 : 0)) {
+    const email = cell(r, eIdx >= 0 ? eIdx : 1).toLowerCase();
+    if (email) map.set(email, cell(r, nIdx >= 0 ? nIdx : 0));
+  }
+  return map;
+}
+
+// AAH staff who accepted the event's invitation — who a volunteer can ask
+// about the visit. Only staff (on the staff tab, or an @aahsmilefarm.org
+// address); any other guest, e.g. a school contact, is never shared.
+function staffContacts(event, staff) {
+  return ((event && event.attendees) || [])
+    .filter(a => a.email && !a.resource && a.responseStatus === 'accepted')
+    .map(a => a.email.toLowerCase())
+    .filter(e => staff.has(e) || e.endsWith('@aahsmilefarm.org'))
+    .map(e => ({ name: staff.get(e) || '', email: e }));
+}
+
 // ── Cancelled events ──────────────────────────────────────────────────────────
 
 let _signupsTabId = null;
@@ -528,6 +559,12 @@ async function main() {
   // ── Reminders ─────────────────────────────────────────────────────────────
   let sent = 0, skipped = 0;
 
+  // Fail-soft: without the staff tab, @aahsmilefarm.org guests still count
+  // (shown by email only); reminders never wait on this.
+  let staff = new Map();
+  try { staff = await fetchStaff(sheets); }
+  catch (err) { console.warn('[reminders] Could not read the staff tab; contacts shown by email only:', err.message); }
+
   // Rows shift when someone cancels (their row is deleted), so "Reminded" is
   // marked by Signup ID, looked up fresh here — not by the row number from the
   // read at the start, which could by now point at someone else's row (who
@@ -577,6 +614,7 @@ async function main() {
           // makes the email omit the location rather than guess at one.
           location:  ((event && event.location) || '').trim(),
           cancelUrl: CANCEL_URL,
+          staffContacts: staffContacts(event, staff),
         });
 
         // Mark row as reminded so we never send twice. A row whose Signup ID

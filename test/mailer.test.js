@@ -79,3 +79,19 @@ test('cancellation email: a family gets one message naming everyone', async () =
   assert.match(sent[0].text, /which Kid One and Kid Two signed up for, has been cancelled/);
   assert.match(sent[0].text, /Their signups have been removed/);
 });
+
+test('reminder: names the staff to contact when there are any', async () => {
+  sent.length = 0;
+  const { sendReminderEmail } = require('../mailer');
+  const base2 = { to: 'v@x.org', name: 'Aanya', shiftName: 'Mobile Visit', date: '2026-10-24', time: '1:45pm', location: '2625 Patricia Dr', cancelUrl: 'https://volunteerapp.test/cancel.html' };
+  await sendReminderEmail({ ...base2, staffContacts: [{ name: 'Jas Chen', email: 'jasmine@aahsmilefarm.org' }] });
+  assert.match(sent[0].text, /If you have any questions, you can contact Jas Chen at jasmine@aahsmilefarm\.org\./);
+  assert.match(sent[0].html, /Jas Chen at <a href="mailto:jasmine@aahsmilefarm\.org">jasmine@aahsmilefarm\.org<\/a>/);
+  sent.length = 0;
+  await sendReminderEmail({ ...base2, staffContacts: [{ name: 'Jas Chen', email: 'a@aahsmilefarm.org' }, { name: '', email: 'b@aahsmilefarm.org' }, { name: 'Pat <b>', email: 'c@x.org' }] });
+  assert.match(sent[0].text, /contact Jas Chen at a@aahsmilefarm\.org, b@aahsmilefarm\.org or Pat <b> at c@x\.org\./);
+  assert.ok(!sent[0].html.includes('Pat <b>') && sent[0].html.includes('Pat &lt;b&gt;'));
+  sent.length = 0;
+  await sendReminderEmail({ ...base2 });
+  assert.ok(!/any questions/.test(sent[0].text) && !/any questions/.test(sent[0].html));
+});

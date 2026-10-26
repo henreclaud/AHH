@@ -71,8 +71,21 @@ async function sendViaResend({ to, subject, text }) {
  * @param {string} opts.location  Location string (may be empty)
  * @param {string} opts.cancelUrl Full URL to the cancel page
  */
-async function sendReminderEmail({ to, name, shiftName, date, time, location, cancelUrl }) {
+async function sendReminderEmail({ to, name, shiftName, date, time, location, cancelUrl, staffContacts = [] }) {
   const transport = createTransport();
+
+  // Who to ask about the visit: AAH staff who accepted the event's calendar
+  // invitation (Peter, Oct 2026 — volunteers were replying "where can we find
+  // you?" to the reminder). Left out when nobody on staff has accepted.
+  const contacts = (staffContacts || []).filter(c => c && c.email);
+  const or = items => items.length <= 1 ? (items[0] || '') : `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
+  const contactText = contacts.length
+    ? `If you have any questions, you can contact ${or(contacts.map(c => c.name ? `${c.name} at ${c.email}` : c.email))}.`
+    : '';
+  const contactHtml = contacts.length
+    ? `If you have any questions, you can contact ${or(contacts.map(c =>
+        `${c.name ? `${escapeHtml(c.name)} at ` : ''}<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>`))}.`
+    : '';
 
   // Format date nicely: "Monday, June 9"
   const d = new Date(date + 'T12:00:00Z'); // noon UTC keeps date stable across timezones
@@ -97,6 +110,7 @@ async function sendReminderEmail({ to, name, shiftName, date, time, location, ca
     '',
     'We look forward to seeing you!',
     '',
+    ...(contactText ? [contactText, ''] : []),
     `If you can't make it, please cancel your signup at: ${cancelUrl}`,
     '',
     '— Animal Assisted Happiness',
@@ -109,7 +123,7 @@ async function sendReminderEmail({ to, name, shiftName, date, time, location, ca
   <strong>${escapeHtml(prettyDate)} at ${escapeHtml(time)}</strong>${location ? `, located at ${escapeHtml(location)}` : ''}.
 </p>
 <p>We look forward to seeing you!</p>
-<p>
+${contactHtml ? `<p>${contactHtml}</p>\n` : ''}<p>
   If you can't make it, please
   <a href="${cancelUrl}">cancel your signup here</a>.
 </p>
