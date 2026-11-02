@@ -31,6 +31,7 @@ const {
   markCheckIn,
   markCheckOut,
   markNoShows,
+  countStaffVisit,
 } = require('./google');
 
 const app  = express();
@@ -188,6 +189,7 @@ async function handleLogin(role, tokenMap, supplied, res) {
   const token = crypto.randomBytes(32).toString('hex');
   tokenMap.set(token, Date.now() + SESSION_TTL_MS);
   console.log(`[auth] ${role} login successful`);
+  if (role === 'staff') countStaffVisit();
   res.json({ token });
 }
 

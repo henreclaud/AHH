@@ -18,7 +18,7 @@ const SIGNUP_HEADER = ['Timestamp','Volunteer Name','Email','Shift ID','Shift Na
 function httpError(status, msg) { const e = new Error(msg || `HTTP ${status}`); e.status = status; return e; }
 
 function installFakeGoogle({ registered, staff, password, onPatch } = {}) {
-  const state = { etagN: 1, patchCalls: 0, getCalls: 0, interfere: null, failGet: new Map(), failPatch: new Map() };
+  const state = { etagN: 1, patchCalls: 0, getCalls: 0, interfere: null, failGet: new Map(), failPatch: new Map(), tabs: {}, failTabs: false, addSheetCalls: 0 };
   const cal   = new Map();
   const sheet = [SIGNUP_HEADER.slice()];
   // The real sheet marks Youth Ambassadors with TRUE (Salesforce checkbox export).
@@ -58,6 +58,7 @@ function installFakeGoogle({ registered, staff, password, onPatch } = {}) {
     get: async () => ({ data: { sheets: [
       { properties: { title: 'signups', sheetId: 0 } },
       { properties: { title: 'staff', sheetId: 1 } },
+      ...Object.keys(state.tabs).map((title, i) => ({ properties: { title, sheetId: 2 + i } })),
     ] } }),
     values: {
       get: async ({ range }) => {
@@ -65,6 +66,8 @@ function installFakeGoogle({ registered, staff, password, onPatch } = {}) {
         if (/^pwd!/.test(range))                   return { data: { values: [['staff', password || 'test-staff-pw']] } };
         if (/^'staff'!/.test(range))               return { data: { values: staff || [['Name', 'Email']] } };
         if (/^A2:B2$/.test(range))                 return { data: { values: [] } };   // banner
+        const tab = range.match(/^'([^']+)'!/);
+        if (tab && state.tabs[tab[1]]) return { data: { values: copy(state.tabs[tab[1]]) } };
         const m = range.match(/^signups!H(\d+)$/);
         if (m) return { data: { values: [[(sheet[m[1] - 1] || [])[7] || '']] } };
         return { data: { values: copy(sheet) } };
@@ -73,6 +76,12 @@ function installFakeGoogle({ registered, staff, password, onPatch } = {}) {
       update: async () => ({}),
       batchUpdate: async ({ requestBody }) => {
         for (const d of requestBody.data || []) {
+          const t = d.range.match(/^'([^']+)'!A(\d+):B\d+$/);
+          if (t) {
+            if (state.failTabs) throw httpError(500, 'Sheets write failed');
+            state.tabs[t[1]][+t[2] - 1] = d.values[0];
+            continue;
+          }
           const m = d.range.match(/^signups!([A-Z])(\d+)$/);
           if (!m) continue;
           const row = sheet[+m[2] - 1], col = m[1].charCodeAt(0) - 65;
@@ -83,6 +92,11 @@ function installFakeGoogle({ registered, staff, password, onPatch } = {}) {
       },
     },
     batchUpdate: async ({ requestBody }) => {
+      for (const r of requestBody.requests) if (r.addSheet) {
+        state.addSheetCalls++;
+        if (state.failTabs) throw httpError(403, 'No permission to add a tab');
+        state.tabs[r.addSheet.properties.title] = [];
+      }
       for (const r of requestBody.requests) if (r.deleteDimension) sheet.splice(r.deleteDimension.range.startIndex, 1);
       return {};
     },

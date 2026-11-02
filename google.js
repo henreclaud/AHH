@@ -1605,4 +1605,60 @@ async function getStaffList() {
   return _staffCache;
 }
 
-module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getStaffList, getBannerMessages, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, sanitizeForSheet, syncEventSignups, reconcileSignupBlocks };
+// ── Staff page visit counter ─────────────────────────────────────────────────
+// One row per day on its own tab. The staff page asks for the password on every
+// page load, so each successful login is one visit. Staff share one password, so
+// this says how often the page is opened, not by whom.
+//
+// The tab name must not contain "staff": the roster lookups (getStaffList and
+// send-reminders.js) find their tab by matching that word in the title.
+const VISITS_TAB = 'page counts';
+let _visitQueue  = Promise.resolve();
+
+// Never rejects and is never awaited by the login: a Sheets problem costs one
+// count, not a staff member's sign-in. Queued so two logins at once can't both
+// read the same number and lose a visit.
+function countStaffVisit() {
+  const date = todayPacific();
+  _visitQueue = _visitQueue
+    .then(() => _addStaffVisit(date))
+    .catch(err => console.warn('[visits] could not count a staff visit:', err.message));
+  return _visitQueue;
+}
+
+async function _addStaffVisit(date) {
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID is not set.');
+  const sheets = google.sheets({ version: 'v4', auth: getAuth() });
+
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: SHEET_ID,
+    fields: 'sheets.properties.title',
+  });
+  const exists = (meta.data.sheets || []).some(s => s.properties.title === VISITS_TAB);
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: { requests: [{ addSheet: { properties: { title: VISITS_TAB } } }] },
+    });
+  }
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range:         `'${VISITS_TAB}'!A:B`,
+  });
+  const rows = res.data.values || [];
+  const data = [];
+  if (!rows.length) data.push({ range: `'${VISITS_TAB}'!A1:B1`, values: [['Date', 'Staff page visits']] });
+
+  const idx = rows.findIndex(r => String(r[0] || '').trim() === date);
+  const row = idx >= 0 ? idx + 1 : Math.max(rows.length, 1) + 1;
+  const n   = idx >= 0 ? (parseInt(rows[idx][1], 10) || 0) + 1 : 1;
+  data.push({ range: `'${VISITS_TAB}'!A${row}:B${row}`, values: [[date, n]] });
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: { valueInputOption: 'RAW', data },
+  });
+}
+
+module.exports = { getShifts, getStaffShifts, getShiftById, getAdminShifts, createSignup, cancelSignupById, getUpcomingSignupsByEmail, ensureHeaders, getPasswords, getStaffList, getBannerMessages, getTodaySignupsForPerson, getTodayCheckoutsForPerson, markCheckIn, markCheckOut, markNoShows, sanitizeForSheet, syncEventSignups, reconcileSignupBlocks, countStaffVisit };
