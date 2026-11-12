@@ -333,11 +333,11 @@ async function refreshCalendarCache() {
     // If redacting the braced text leaves nothing for volunteers to see, treat
     // the event as staff-only rather than showing a blank/broken title.
     const nameVolunteer = parseShiftName(titleVolunteer) || name;
-    // "Canceled" in the title: staff are keeping the event on the calendar as a
-    // record, but it's off the volunteer page so nobody new signs up. Existing
-    // signups are emailed and removed by the hourly job.
+    // "Canceled" in the title: the event stays on the volunteer page marked
+    // Canceled (not everyone reads email, per Peter, Nov 2026), but nobody can
+    // sign up for it. Existing signups are emailed and removed by the hourly job.
     const cancelled = isCancelledTitle(rawTitle);
-    const hideFromVolunteers = staff_only || !parseShiftName(titleVolunteer) || cancelled;
+    const hideFromVolunteers = staff_only || !parseShiftName(titleVolunteer);
 
     // Look for a capacity limit in the title first, then the description.
     // If neither has one, capacity is null — no limit is shown in the UI.
@@ -706,7 +706,7 @@ async function getShifts() {
     .filter(s => !/^hide\b/i.test(s.title || '')) // HIDE- prefix = staff-only event
     // attendees are staff emails — never expose them on the public endpoint.
     // title_volunteer replaces title here (redacted braced text, if any).
-    .map(({ description_staff, staff_only, cancelled, attendees, title, title_volunteer, end_ms, ...pub }) =>
+    .map(({ description_staff, staff_only, attendees, title, title_volunteer, end_ms, ...pub }) =>
       ({ ...pub, title: title_volunteer ?? title }));
 }
 
@@ -859,6 +859,9 @@ async function createSignup(shiftId, name, email) {
 
   if (!shift) {
     return { ok: false, error: 'That shift no longer exists.' };
+  }
+  if (shift.cancelled) {
+    return { ok: false, error: 'This visit has been canceled.' };
   }
 
   // Duplicate check — same name AND email for the same shift (case-insensitive).

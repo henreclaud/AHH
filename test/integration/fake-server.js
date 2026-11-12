@@ -26,6 +26,7 @@ fg.addEvent('E_FARM', 'Farm Chores Limit 6', 'Wear closed-toe shoes. {Gate code 
 fg.addEvent('E_VISIT', 'Farm Visit Limit 8', '<b>Bring water</b><br>Meet at the barn', now + 54 * H);
 fg.addEvent('E_MOBILE', 'Mobile Visit - Library', 'No limit, Youth Ambassadors only', now + 78 * H);
 fg.addEvent('E_SOON', 'Barnyard Buddy Time Limit 4', 'Starts in 10 minutes (for testing check-in)', now + 10 * 60e3);
+fg.addEvent('E_CANC', 'CANCELED - Moved to 12/9 Mobile Visit (Stress Relief) Limit 6', 'This visit has been canceled and moved.', now + 100 * H);
 
 process.chdir(path.join(__dirname, '../..'));
 require(path.join(__dirname, '../../server.js'));

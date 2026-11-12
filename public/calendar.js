@@ -94,6 +94,13 @@ function render(shifts) {
       const activity = document.createElement('span');
       activity.className   = 'cal-activity';
       activity.textContent = cleanActivity(s);
+      if (s.cancelled) {
+        row.classList.add('is-cancelled');
+        const tag = document.createElement('span');
+        tag.className   = 'spots-pill cancelled';
+        tag.textContent = 'Canceled';
+        activity.append(' ', tag);
+      }
 
       const time = document.createElement('span');
       time.className   = 'cal-time';

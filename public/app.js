@@ -39,7 +39,7 @@ async function loadShifts() {
   try {
     const res = await fetch('/api/shifts');
     allShifts = await res.json();
-    statNumber.textContent = allShifts.filter(s => !s.is_full).length;
+    statNumber.textContent = allShifts.filter(s => !s.is_full && !s.cancelled).length;
     buildTypeChips();
     render();
   } catch {
@@ -76,7 +76,7 @@ function getVisible() {
       } else if (filters.type !== 'all' && (s.category || 'Visit') !== filters.type) return false;
       // Openings only — a shift counts as an "open opportunity" only when it
       // has a volunteer limit AND still has spots left (per Peter: exclude Limit=null).
-      if (filters.openingsOnly && (!s.has_limit || s.is_full)) return false;
+      if (filters.openingsOnly && (!s.has_limit || s.is_full || s.cancelled)) return false;
       return true;
     })
     .sort(compareDateTime); // always soonest first
@@ -107,7 +107,7 @@ function render() {
 // ── Card builder ─────────────────────────────────────────────────────────────
 function createCard(shift) {
   const card = document.createElement('article');
-  card.className = 'scard' + (shift.is_full ? ' is-full' : '');
+  card.className = 'scard' + (shift.cancelled ? ' is-cancelled' : shift.is_full ? ' is-full' : '');
 
   // Top row: category tag + spots status
   const top = document.createElement('div');
@@ -118,7 +118,14 @@ function createCard(shift) {
   tag.textContent = shift.category || 'Visit';
   top.appendChild(tag);
 
-  if (shift.has_limit) {
+  // Cancelled events stay listed so volunteers who don't read email still find
+  // out; spot counts mean nothing for them.
+  if (shift.cancelled) {
+    const pill = document.createElement('span');
+    pill.className = 'spots-pill cancelled';
+    pill.textContent = 'Canceled';
+    top.appendChild(pill);
+  } else if (shift.has_limit) {
     const pill = document.createElement('span');
     const left = shift.spots_left;
     if (shift.is_full) {
@@ -200,6 +207,12 @@ function createCard(shift) {
   // sheet), so the button must let anyone try; the server does the real gating.
   const btn = document.createElement('button');
   btn.className = 'btn btn-primary scard-btn';
+  if (shift.cancelled) {
+    btn.textContent = 'Canceled — no signups';
+    btn.disabled = true;
+    card.appendChild(btn);
+    return card;
+  }
   if (shift.is_full) {
     // A shift with no "Limit xx" in the title isn't full — it's simply not
     // open for general signups, so word it differently from a genuinely
@@ -253,7 +266,7 @@ function buildTypeChips() {
 
   // Openings toggle flows at the end of the chip row.
   if (openingsBtn) {
-    const openCount = allShifts.filter(s => s.has_limit && !s.is_full).length;
+    const openCount = allShifts.filter(s => s.has_limit && !s.is_full && !s.cancelled).length;
     openingsBtn.innerHTML = `Open Opportunities<span class="chip-count">${openCount}</span>`;
     typeRow.appendChild(openingsBtn);
   }

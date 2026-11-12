@@ -228,6 +228,11 @@ function createCard(shift) {
     pill.className = 'spots-pill ended';
     pill.textContent = 'Ended';
     top.appendChild(pill);
+  } else if (shift.cancelled) {
+    const pill = document.createElement('span');
+    pill.className = 'spots-pill cancelled';
+    pill.textContent = 'Canceled';
+    top.appendChild(pill);
   } else if (shift.has_limit) {
     const pill = document.createElement('span');
     const left = shift.spots_left;

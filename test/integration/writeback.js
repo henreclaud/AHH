@@ -122,9 +122,13 @@ const idOf   = name => (sheet.find(r => r[1] === name) || [])[7];
 
   // 13. Cancelled event ("Canceled" in the title)
   const pubAll = await g.getShifts();
-  check('cancelled event: hidden from the volunteer page', !pubAll.some(x => x.id === 'E_CANC'));
+  const pubCanc = pubAll.find(x => x.id === 'E_CANC');
+  check('cancelled event: still on the volunteer page, marked cancelled', !!pubCanc && pubCanc.cancelled === true);
+  check('cancelled event: public data still has no staff-only fields', !!pubCanc && !('attendees' in pubCanc) && !('description_staff' in pubCanc) && !('staff_only' in pubCanc));
+  check('normal event: not marked cancelled', pubAll.filter(x => x.id !== 'E_CANC').every(x => x.cancelled === false));
+  const before13 = sheet.length;
   const tryJoin = await g.createSignup('E_CANC', 'Late Comer', 'bo@x.org');
-  check('cancelled event: nobody new can sign up', tryJoin.ok === false);
+  check('cancelled event: nobody new can sign up', tryJoin.ok === false && /canceled/i.test(tryJoin.error) && sheet.length === before13, JSON.stringify(tryJoin));
   check('cancelled event: still on the staff page', (await g.getAdminShifts()).some(x => x.id === 'E_CANC'));
   check('cancelled event: its list is left as a record (reconcile skips it)', desc('E_CANC') === 'Notes');
 

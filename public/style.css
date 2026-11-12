@@ -1479,6 +1479,18 @@ input:focus {
   padding: 3px 8px;
   border-radius: 5px;
 }
+.spots-pill.cancelled {
+  color: #b42318;
+  background: #fde8e7;
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+.scard.is-cancelled:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--border);
+}
+.scard-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* Title */
 .scard-title {
